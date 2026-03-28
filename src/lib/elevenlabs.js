@@ -1,7 +1,7 @@
 const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1";
 
 export async function generateSpeech({ text, voiceId }) {
-  const voice = voiceId || process.env.ELEVENLABS_VOICE_ID || "EXAVITQu4vr4xnSDxMaL";
+  const voice = voiceId || process.env.ELEVENLABS_VOICE_ID || "El3gkPAhMU9R5biL3rtU";
 
   const response = await fetch(`${ELEVENLABS_BASE}/text-to-speech/${voice}`, {
     method: "POST",

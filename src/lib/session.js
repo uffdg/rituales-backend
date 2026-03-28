@@ -1,7 +1,7 @@
 // Construye el plan de sesión guiada a partir del ritual y los inputs del usuario.
 // Separa los bloques reutilizables (intro/cierre) del personalizado para optimizar TTS.
 
-export function buildGuidedSession(input, ritual) {
+export function buildGuidedSession(input, ritual, meditationScript = null) {
   const target = input.duration * 60;
   const intro = input.duration >= 20 ? 55 : input.duration >= 10 ? 45 : 35;
   const closing = input.duration >= 20 ? 40 : 30;
@@ -19,7 +19,7 @@ export function buildGuidedSession(input, ritual) {
       ? "Quédate en este momento con suavidad y atención."
       : "Toma este momento breve como un punto de regreso.";
 
-  const personalizedScript = [
+  const personalizedScript = meditationScript || [
     `Tu intención para este momento es: ${input.intention.trim()}.`,
     ritual.opening,
     durationNote,

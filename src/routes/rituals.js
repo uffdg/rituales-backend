@@ -2,6 +2,7 @@ import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
 import { generateSpeech } from "../lib/elevenlabs.js";
 import { buildGuidedSession } from "../lib/session.js";
+import { generateRitualWithClaude, generateMeditationScript, applyPauseMarkers } from "../lib/claude.js";
 
 export const ritualsRouter = Router();
 
@@ -12,26 +13,46 @@ ritualsRouter.post("/create", async (req, res, next) => {
   try {
     const input = req.body;
 
-    const ritual = input.aiRitual?.title
+    // Si hay intención real → generar con Gemini
+    // Si no → usar template del frontend como fallback
+    let ritual = input.aiRitual?.title
       ? input.aiRitual
-      : { title: "", opening: "", symbolicAction: "", closing: "" };
+      : { title: "Ritual", opening: "", symbolicAction: "", closing: "" };
 
-    const guidedSession = input.guidedSession || buildGuidedSession(input, ritual);
+    const hasIntention = input.intention?.trim().length > 5;
+    if (hasIntention && process.env.ANTHROPIC_API_KEY) {
+      try {
+        ritual = await generateRitualWithClaude(input);
+      } catch (err) {
+        console.error("Claude error, usando template:", err.message);
+      }
+    }
+
+    let meditationScript = null;
+    if (hasIntention && process.env.ANTHROPIC_API_KEY) {
+      try {
+        const raw = await generateMeditationScript(input, ritual);
+        meditationScript = applyPauseMarkers(raw);
+      } catch (err) {
+        console.error("Meditation script error, usando fallback:", err.message);
+      }
+    }
+
+    const guidedSession = input.guidedSession || buildGuidedSession(input, ritual, meditationScript);
 
     const { data, error } = await supabase
       .from("rituals")
       .insert({
+        title: ritual.title || "Ritual",
         ritual_type: input.ritualType,
         intention: input.intention,
+        intention_category: input.intentionCategory || null,
         energy: input.energy,
         element: input.element,
         duration: input.duration,
         intensity: input.intensity,
         anchor: input.anchor || null,
-        ritual_title: ritual.title,
-        ritual_opening: ritual.opening,
-        ritual_symbolic_action: ritual.symbolicAction,
-        ritual_closing: ritual.closing,
+        ai_ritual: ritual,
         guided_session: guidedSession,
       })
       .select("id")
@@ -56,10 +77,10 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
     const { id } = req.params;
     const { voice, guidedSession } = req.body;
 
-    // Devolver audio cacheado si ya existe
+    // Devolver audio cacheado si ya existe, y traer guided_session como fallback
     const { data: existing } = await supabase
       .from("rituals")
-      .select("audio_url")
+      .select("audio_url, guided_session")
       .eq("id", id)
       .single();
 
@@ -72,9 +93,10 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
       });
     }
 
+    const session = guidedSession || existing?.guided_session;
     const script =
-      guidedSession?.personalizedScript ||
-      guidedSession?.segments?.find((s) => s.kind === "personalized")?.text || "";
+      session?.personalizedScript ||
+      session?.segments?.find((s) => s.kind === "personalized")?.text || "";
 
     if (!script) {
       return res.status(400).json({ error: "No hay script para generar audio." });
@@ -115,11 +137,11 @@ ritualsRouter.get("/:id", async (req, res, next) => {
 
     res.json({
       ritualId: data.id,
-      ritual: {
-        title: data.ritual_title,
-        opening: data.ritual_opening,
-        symbolicAction: data.ritual_symbolic_action,
-        closing: data.ritual_closing,
+      ritual: data.ai_ritual || {
+        title: data.title,
+        opening: "",
+        symbolicAction: "",
+        closing: "",
       },
       guidedSession: data.guided_session,
       guidedAudio: data.audio_url
