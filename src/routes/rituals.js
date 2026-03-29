@@ -52,6 +52,7 @@ ritualsRouter.post("/create", async (req, res, next) => {
         duration: input.duration,
         intensity: input.intensity,
         anchor: input.anchor || null,
+        user_id: input.userId || null,
         ai_ritual: ritual,
         guided_session: guidedSession,
       })
