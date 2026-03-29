@@ -186,9 +186,28 @@ Intención reencuadrada: ${input.intention}
 Estado del sistema nervioso: ${zona}
 Elemento: ${input.element}
 Duración: ${input.duration} minutos
-Sección: RITUAL COMPLETO`,
+Sección: RITUAL COMPLETO
+
+TEXTO DEL RITUAL (usá estas frases como base — no inventés contenido nuevo, tejelas en el flujo meditativo):
+Apertura: ${ritual.opening}
+Acción simbólica: ${ritual.symbolicAction}
+Cierre: ${ritual.closing}`,
       },
     ],
+  });
+
+  return message.content[0].text.trim();
+}
+
+export async function reframeIntention(rawText, ritualType) {
+  const message = await client.messages.create({
+    model: "claude-haiku-4-5",
+    max_tokens: 80,
+    system: `Reencuadrás lo que dice una persona en una intención positiva, en español rioplatense.
+Devolvés UNA SOLA frase que transforme el problema o la queja en una intención constructiva.
+Empezá con "Quiero", "Me abro a" o "Elijo".
+Sin explicaciones. Sin comillas. Solo la frase.`,
+    messages: [{ role: "user", content: rawText }],
   });
 
   return message.content[0].text.trim();
@@ -200,5 +219,7 @@ export function applyPauseMarkers(script) {
     .replace(/\[P1\]/g, " ... ")
     .replace(/\[P2\]/g, " ...... ")
     .replace(/\[P3\]/g, " ........... ")
-    .replace(/\[RESPIRA\]/g, " ... inhala ... ... exhala ... ... ");
+    .replace(/\[RESPIRA\]/g, " ... inhala ... ... exhala ... ... ")
+    // Pausa de 0.5s después de cada punto seguido de espacio o salto de línea
+    .replace(/\.\s+/g, ". ... ");
 }

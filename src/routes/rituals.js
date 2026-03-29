@@ -2,9 +2,21 @@ import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
 import { generateSpeech } from "../lib/elevenlabs.js";
 import { buildGuidedSession } from "../lib/session.js";
-import { generateRitualWithClaude, generateMeditationScript, applyPauseMarkers } from "../lib/claude.js";
+import { generateRitualWithClaude, generateMeditationScript, applyPauseMarkers, reframeIntention } from "../lib/claude.js";
 
 export const ritualsRouter = Router();
+
+// POST /api/rituals/reframe-intention
+ritualsRouter.post("/reframe-intention", async (req, res, next) => {
+  try {
+    const { text } = req.body;
+    if (!text?.trim()) return res.status(400).json({ error: "No text provided" });
+    const reframed = await reframeIntention(text);
+    res.json({ reframed });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // POST /api/rituals/create
 // El frontend envía el ritual ya generado (por templates o IA client-side).
