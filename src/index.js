@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { ritualsRouter } from "./routes/rituals.js";
 import { eventsRouter } from "./routes/events.js";
+import { meRouter } from "./routes/me.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,6 +15,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/api/rituals", ritualsRouter);
 app.use("/api/events", eventsRouter);
+app.use("/api/me", meRouter);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

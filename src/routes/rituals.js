@@ -1,6 +1,8 @@
 import { Router } from "express";
+import { getAuthenticatedUser, requireUser } from "../lib/auth.js";
 import { supabase } from "../lib/supabase.js";
 import { generateSpeech } from "../lib/elevenlabs.js";
+import { mapRitualRow } from "../lib/rituals.js";
 import { buildGuidedSession } from "../lib/session.js";
 import { generateRitualWithClaude, reframeIntention } from "../lib/claude.js";
 
@@ -24,6 +26,7 @@ ritualsRouter.post("/reframe-intention", async (req, res, next) => {
 ritualsRouter.post("/create", async (req, res, next) => {
   try {
     const input = req.body;
+    const authUser = await getAuthenticatedUser(req);
 
     // Si hay intención real → generar con Gemini
     // Si no → usar template del frontend como fallback
@@ -54,7 +57,7 @@ ritualsRouter.post("/create", async (req, res, next) => {
         duration: input.duration,
         intensity: input.intensity,
         anchor: input.anchor || null,
-        user_id: input.userId || null,
+        user_id: authUser?.id || input.userId || null,
         ai_ritual: ritual,
         guided_session: guidedSession,
       })
@@ -71,6 +74,111 @@ ritualsRouter.post("/create", async (req, res, next) => {
     });
   } catch (err) {
     next(err);
+  }
+});
+
+ritualsRouter.post("/:id/favorite", requireUser, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from("ritual_favorites")
+      .upsert(
+        {
+          ritual_id: id,
+          user_id: req.user.id,
+        },
+        { onConflict: "ritual_id,user_id" },
+      );
+
+    if (error) throw error;
+
+    res.json({ ok: true, favorited: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+ritualsRouter.delete("/:id/favorite", requireUser, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from("ritual_favorites")
+      .delete()
+      .eq("ritual_id", id)
+      .eq("user_id", req.user.id);
+
+    if (error) throw error;
+
+    res.json({ ok: true, favorited: false });
+  } catch (error) {
+    next(error);
+  }
+});
+
+ritualsRouter.post("/:id/like", requireUser, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const { data: ritual, error: ritualError } = await supabase
+      .from("rituals")
+      .select("id, user_id")
+      .eq("id", id)
+      .single();
+
+    if (ritualError) throw ritualError;
+    if (!ritual) {
+      return res.status(404).json({ error: "Ritual no encontrado." });
+    }
+
+    if (ritual.user_id === req.user.id) {
+      return res.status(400).json({ error: "No podés darte me gusta a vos misma." });
+    }
+
+    const { error } = await supabase
+      .from("ritual_likes")
+      .upsert(
+        {
+          ritual_id: id,
+          user_id: req.user.id,
+        },
+        { onConflict: "ritual_id,user_id" },
+      );
+
+    if (error) throw error;
+
+    const { count } = await supabase
+      .from("ritual_likes")
+      .select("*", { count: "exact", head: true })
+      .eq("ritual_id", id);
+
+    res.json({ ok: true, liked: true, likesCount: count || 0 });
+  } catch (error) {
+    next(error);
+  }
+});
+
+ritualsRouter.delete("/:id/like", requireUser, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from("ritual_likes")
+      .delete()
+      .eq("ritual_id", id)
+      .eq("user_id", req.user.id);
+
+    if (error) throw error;
+
+    const { count } = await supabase
+      .from("ritual_likes")
+      .select("*", { count: "exact", head: true })
+      .eq("ritual_id", id);
+
+    res.json({ ok: true, liked: false, likesCount: count || 0 });
+  } catch (error) {
+    next(error);
   }
 });
 
@@ -128,6 +236,7 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
 // GET /api/rituals/:id
 ritualsRouter.get("/:id", async (req, res, next) => {
   try {
+    const viewer = await getAuthenticatedUser(req);
     const { data, error } = await supabase
       .from("rituals")
       .select("*")
@@ -138,25 +247,34 @@ ritualsRouter.get("/:id", async (req, res, next) => {
       return res.status(404).json({ error: "Ritual no encontrado." });
     }
 
-    res.json({
-      ritualId: data.id,
-      ritual: data.ai_ritual || {
-        title: data.title,
-        opening: "",
-        symbolicAction: "",
-        closing: "",
-      },
-      guidedSession: data.guided_session,
-      guidedAudio: data.audio_url
-        ? { status: "ready", audioUrl: data.audio_url, provider: "elevenlabs" }
-        : { status: "idle" },
-      intention: data.intention,
-      energy: data.energy,
-      element: data.element,
-      intensity: data.intensity,
-      duration: data.duration,
-      anchor: data.anchor,
-    });
+    const [{ count: likesCount }, favoriteResult, likeResult] = await Promise.all([
+      supabase
+        .from("ritual_likes")
+        .select("*", { count: "exact", head: true })
+        .eq("ritual_id", data.id),
+      viewer
+        ? supabase
+            .from("ritual_favorites")
+            .select("ritual_id", { head: true, count: "exact" })
+            .eq("ritual_id", data.id)
+            .eq("user_id", viewer.id)
+        : Promise.resolve({ count: 0 }),
+      viewer
+        ? supabase
+            .from("ritual_likes")
+            .select("ritual_id", { head: true, count: "exact" })
+            .eq("ritual_id", data.id)
+            .eq("user_id", viewer.id)
+        : Promise.resolve({ count: 0 }),
+    ]);
+
+    res.json(
+      mapRitualRow(data, {
+        likesCount: likesCount || 0,
+        likedByViewer: Boolean((likeResult.count || 0) > 0),
+        favoritedByViewer: Boolean((favoriteResult.count || 0) > 0),
+      }),
+    );
   } catch (err) {
     next(err);
   }
