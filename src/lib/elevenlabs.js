@@ -14,10 +14,10 @@ export async function generateSpeech({ text, voiceId }) {
       model_id: "eleven_multilingual_v2",
       language_code: "es",
       voice_settings: {
-        stability: 0.85,
+        stability: 0.55,
         similarity_boost: 0.75,
-        speed: 0.82,
-        style: 0.2,
+        speed: 0.76,
+        style: 0.45,
       },
     }),
   });

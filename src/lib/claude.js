@@ -218,10 +218,12 @@ UNA SOLA frase. Sin comillas. Sin explicaciones.`,
 // Convierte marcas [P1][P2][P3][RESPIRA] a pausas naturales para TTS
 export function applyPauseMarkers(script) {
   return script
-    .replace(/\[P1\]/g, " ... ")
-    .replace(/\[P2\]/g, " ...... ")
-    .replace(/\[P3\]/g, " ........... ")
-    .replace(/\[RESPIRA\]/g, " ... inhala ... ... exhala ... ... ")
-    // Pausa de 0.5s después de cada punto seguido de espacio o salto de línea
-    .replace(/\.\s+/g, ". ... ");
+    .replace(/\[P1\]/g, " ...... ")
+    .replace(/\[P2\]/g, " ........... ")
+    .replace(/\[P3\]/g, " .................. ")
+    .replace(/\[RESPIRA\]/g, " ...... inhala ...... exhala ........... ")
+    // Pausa después de coma
+    .replace(/,\s+/g, ", ... ")
+    // Pausa larga después de punto
+    .replace(/\.\s+/g, ". ...... ");
 }
