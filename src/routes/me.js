@@ -24,29 +24,37 @@ async function getLikesCountMap(ritualIds) {
   return counts;
 }
 
+function isMissingTableError(error) {
+  return error?.code === "PGRST205";
+}
+
 meRouter.get("/dashboard", requireUser, async (req, res, next) => {
   try {
     const user = req.user;
 
-    const [{ data: ownRows, error: ownError }, { data: favoriteRows, error: favoriteError }] =
-      await Promise.all([
-        supabase
-          .from("rituals")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("ritual_favorites")
-          .select("ritual_id, created_at, rituals(*)")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false }),
-      ]);
+    const [
+      { data: ownRows, error: ownError },
+      { data: favoriteRows, error: favoriteError },
+    ] = await Promise.all([
+      supabase
+        .from("rituals")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("ritual_favorites")
+        .select("ritual_id, created_at, rituals(*)")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }),
+    ]);
 
     if (ownError) throw ownError;
-    if (favoriteError) throw favoriteError;
+
+    const safeFavoriteRows = isMissingTableError(favoriteError) ? [] : favoriteRows || [];
+    if (favoriteError && !isMissingTableError(favoriteError)) throw favoriteError;
 
     const ownIds = (ownRows || []).map((row) => row.id);
-    const favoriteRituals = (favoriteRows || [])
+    const favoriteRituals = safeFavoriteRows
       .map((row) => row.rituals)
       .filter(Boolean);
     const favoriteIds = favoriteRituals.map((row) => row.id);
