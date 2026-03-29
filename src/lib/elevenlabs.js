@@ -1,7 +1,18 @@
 const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1";
 
+function buildSpeechSeed(text) {
+  let hash = 0;
+
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) >>> 0;
+  }
+
+  return hash || 1;
+}
+
 export async function generateSpeech({ text, voiceId }) {
   const voice = voiceId || process.env.ELEVENLABS_VOICE_ID || "El3gkPAhMU9R5biL3rtU";
+  const seed = buildSpeechSeed(`${voice}:${text}`);
 
   const response = await fetch(`${ELEVENLABS_BASE}/text-to-speech/${voice}`, {
     method: "POST",
@@ -13,11 +24,15 @@ export async function generateSpeech({ text, voiceId }) {
       text,
       model_id: "eleven_multilingual_v2",
       language_code: "es",
+      output_format: "mp3_44100_128",
+      apply_text_normalization: "auto",
+      seed,
       voice_settings: {
-        stability: 0.55,
+        stability: 0.6,
         similarity_boost: 0.75,
-        speed: 0.76,
-        style: 0.45,
+        speed: 0.96,
+        style: 0,
+        use_speaker_boost: false,
       },
     }),
   });

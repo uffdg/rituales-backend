@@ -2,7 +2,7 @@ import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
 import { generateSpeech } from "../lib/elevenlabs.js";
 import { buildGuidedSession } from "../lib/session.js";
-import { generateRitualWithClaude, generateMeditationScript, applyPauseMarkers, reframeIntention } from "../lib/claude.js";
+import { generateRitualWithClaude, reframeIntention } from "../lib/claude.js";
 
 export const ritualsRouter = Router();
 
@@ -40,17 +40,7 @@ ritualsRouter.post("/create", async (req, res, next) => {
       }
     }
 
-    let meditationScript = null;
-    if (hasIntention && process.env.ANTHROPIC_API_KEY) {
-      try {
-        const raw = await generateMeditationScript(input, ritual);
-        meditationScript = applyPauseMarkers(raw);
-      } catch (err) {
-        console.error("Meditation script error, usando fallback:", err.message);
-      }
-    }
-
-    const guidedSession = input.guidedSession || buildGuidedSession(input, ritual, meditationScript);
+    const guidedSession = input.guidedSession || buildGuidedSession(input, ritual);
 
     const { data, error } = await supabase
       .from("rituals")
