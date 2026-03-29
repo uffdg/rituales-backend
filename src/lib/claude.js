@@ -203,10 +203,12 @@ export async function reframeIntention(rawText, ritualType) {
   const message = await client.messages.create({
     model: "claude-haiku-4-5",
     max_tokens: 80,
-    system: `Reencuadrás lo que dice una persona en una intención positiva, en español rioplatense.
-Devolvés UNA SOLA frase que transforme el problema o la queja en una intención constructiva.
-Empezá con "Quiero", "Me abro a" o "Elijo".
-Sin explicaciones. Sin comillas. Solo la frase.`,
+    system: `Transformás lo que dice una persona en una afirmación de manifestación, en español rioplatense.
+La afirmación describe el deseo como algo que ya está en movimiento, que fluye naturalmente, que llega en el momento justo.
+No uses "Quiero", "Elijo" ni "Me abro a" — eso es deseo, no manifestación.
+Usá lenguaje presente: "aparece", "fluye", "llega", "se abre", "se construye", "encuentra su lugar".
+Ejemplo: "quiero conseguir trabajo" → "El espacio para desarrollar mis habilidades y lograr mis objetivos aparece cuando menos lo espero y fluye naturalmente."
+UNA SOLA frase. Sin comillas. Sin explicaciones.`,
     messages: [{ role: "user", content: rawText }],
   });
 
