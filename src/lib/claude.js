@@ -34,7 +34,7 @@ Intensidad: ${input.intensity || "suave"}`,
   return JSON.parse(raw);
 }
 
-export async function reframeIntention(rawText, ritualType) {
+export async function reframeIntention(rawText) {
   const message = await client.messages.create({
     model: "claude-haiku-4-5",
     max_tokens: 80,
@@ -48,4 +48,12 @@ UNA SOLA frase. Sin comillas. Sin explicaciones.`,
   });
 
   return message.content[0].text.trim();
+}
+
+export function applyPauseMarkers(script) {
+  return script
+    .replace(/\[P1\]/g, "... ")
+    .replace(/\[P2\]/g, "... ... ")
+    .replace(/\[P3\]/g, "... ... ... ")
+    .replace(/\[RESPIRA\]/g, "... inhala ... exhala ... ... ");
 }

@@ -4,7 +4,7 @@ import { supabase } from "../lib/supabase.js";
 import { generateSpeech } from "../lib/elevenlabs.js";
 import { mapRitualRow } from "../lib/rituals.js";
 import { buildGuidedSession } from "../lib/session.js";
-import { generateRitualWithClaude, reframeIntention } from "../lib/claude.js";
+import { generateRitualWithClaude, reframeIntention, applyPauseMarkers } from "../lib/claude.js";
 
 export const ritualsRouter = Router();
 
@@ -213,7 +213,7 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
       return res.status(400).json({ error: "No hay script para generar audio." });
     }
 
-    const audioBuffer = await generateSpeech({ text: script, voiceId: voice });
+    const audioBuffer = await generateSpeech({ text: applyPauseMarkers(script), voiceId: voice });
 
     const filename = `rituals/${id}/audio.mp3`;
     const { error: uploadError } = await supabase.storage

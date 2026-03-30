@@ -28,10 +28,10 @@ export async function generateSpeech({ text, voiceId }) {
       apply_text_normalization: "auto",
       seed,
       voice_settings: {
-        stability: 0.6,
+        stability: 0.65,
         similarity_boost: 0.75,
-        speed: 0.96,
-        style: 0,
+        speed: 0.78,
+        style: 0.25,
         use_speaker_boost: false,
       },
     }),
