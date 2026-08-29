@@ -43,7 +43,8 @@ Routes that need auth use `requireUser` middleware. Routes like `rituals/create`
 `src/lib/claude.js`:
 - `generateRitualWithClaude(input)` → ritual JSON (title, opening, symbolicAction, closing)
 - `reframeIntention(rawText)` → single manifestation-style affirmation in rioplatense Spanish
-- `applyPauseMarkers(script)` → converts `[P1]`/`[P2]`/`[P3]`/`[RESPIRA]` to `...` sequences for ElevenLabs pacing
+- `src/lib/speech.js`:
+  - `applyPauseMarkers(script)` → converts `[P1]`/`[P2]`/`[P3]`/`[RESPIRA]` and `[PAUSA_*]` markers to ElevenLabs SSML `<break time="..." />` tags for meditation pacing
 
 `src/lib/session.js` — `buildGuidedSession(input, ritual)` builds the structured session plan with timed segments (intro, personalized, ambient, closing). The personalized script is the only segment sent to TTS.
 
@@ -53,7 +54,7 @@ Routes that need auth use `requireUser` middleware. Routes like `rituals/create`
 
 ### Audio
 
-`src/lib/elevenlabs.js` — `generateSpeech({ text, voiceId })`. Script is processed through `applyPauseMarkers` before being sent. Voice: `El3gkPAhMU9R5biL3rtU`. Audio is uploaded to Supabase Storage bucket `audio` and the public URL is cached in `rituals.audio_url`.
+`src/lib/elevenlabs.js` — `generateSpeech({ text, voiceId })`. Script is processed through `applyPauseMarkers` before being sent. Voice: `El3gkPAhMU9R5biL3rtU`. Audio is uploaded to Supabase Storage bucket `audio` and the public URL is cached in `rituals.audio_url`. `guided_session.speechScript` stores the exact meditation script used for TTS, and `guided_session.audioRenderVersion` marks which pacing system produced the cached audio; old versions are regenerated once, then reused.
 
 ### Database
 

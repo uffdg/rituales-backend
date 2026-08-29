@@ -18,14 +18,35 @@ function sanitizeForSpeech(text = "") {
 function buildPersonalizedScript(input, ritual) {
   return [
     input.intention
-      ? `Tu intención para este momento es ${sanitizeForSpeech(input.intention)}.`
+      ? `Tu intención para este momento es ${sanitizeForSpeech(input.intention)}. [P2]`
       : "",
-    ritual.opening ? sanitizeForSpeech(ritual.opening) : "",
+    ritual.opening ? `${sanitizeForSpeech(ritual.opening)} [P3]` : "",
     ritual.symbolicAction
-      ? `Ahora, muy despacio, ${sanitizeForSpeech(ritual.symbolicAction)}`
+      ? `Ahora, muy despacio, ${sanitizeForSpeech(ritual.symbolicAction)} [P3]`
       : "",
-    ritual.closing ? `Y para cerrar, ${sanitizeForSpeech(ritual.closing)}` : "",
-    input.anchor ? `Quedate con este anclaje: ${sanitizeForSpeech(input.anchor)}.` : "",
+    ritual.closing ? `Y para cerrar, ${sanitizeForSpeech(ritual.closing)} [P2]` : "",
+    input.anchor ? `Quedate con este anclaje: ${sanitizeForSpeech(input.anchor)}. [P2]` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+export function buildMeditationSpeechScript(session) {
+  const intro =
+    session?.segments?.find((segment) => segment.kind === "intro")?.text ||
+    "Cerrá los ojos. Respirá profundo. No hace falta resolver todo ahora. Solo entrá en este momento.";
+  const personalized =
+    session?.personalizedScript ||
+    session?.segments?.find((segment) => segment.kind === "personalized")?.text ||
+    "";
+  const closing =
+    session?.segments?.find((segment) => segment.kind === "closing")?.text ||
+    "Volvé despacio. Quedate con una sola palabra. Llevá esta intención con vos.";
+
+  return [
+    `${sanitizeForSpeech(intro)} [RESPIRA]`,
+    personalized,
+    `${sanitizeForSpeech(closing)} [P3]`,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -43,8 +64,7 @@ export function buildGuidedSession(input, ritual) {
     input.energy === "poder" ? "earth-hum" : "deep-night";
 
   const personalizedScript = buildPersonalizedScript(input, ritual);
-
-  return {
+  const baseSession = {
     targetDurationMinutes: input.duration,
     soundscape,
     locale: "castellano",
@@ -85,5 +105,10 @@ export function buildGuidedSession(input, ritual) {
         text: "Volvé despacio. Quedate con una sola palabra. Llevá esta intención con vos.",
       },
     ],
+  };
+
+  return {
+    ...baseSession,
+    speechScript: buildMeditationSpeechScript(baseSession),
   };
 }

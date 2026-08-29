@@ -3,10 +3,12 @@ import { getAuthenticatedUser, requireUser } from "../lib/auth.js";
 import { supabase } from "../lib/supabase.js";
 import { generateSpeech } from "../lib/elevenlabs.js";
 import { mapRitualRow } from "../lib/rituals.js";
-import { buildGuidedSession } from "../lib/session.js";
-import { generateRitualWithClaude, reframeIntention, applyPauseMarkers } from "../lib/claude.js";
+import { buildGuidedSession, buildMeditationSpeechScript } from "../lib/session.js";
+import { generateRitualWithClaude, reframeIntention } from "../lib/claude.js";
+import { applyPauseMarkers } from "../lib/speech.js";
 
 export const ritualsRouter = Router();
+const MEDITATION_AUDIO_RENDER_VERSION = 2;
 
 // POST /api/rituals/reframe-intention
 ritualsRouter.post("/reframe-intention", async (req, res, next) => {
@@ -200,7 +202,10 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
       .eq("id", id)
       .single();
 
-    if (existing?.audio_url) {
+    if (
+      existing?.audio_url &&
+      existing?.guided_session?.audioRenderVersion === MEDITATION_AUDIO_RENDER_VERSION
+    ) {
       return res.json({
         audioUrl: existing.audio_url,
         status: "ready",
@@ -212,13 +217,22 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
     }
 
     const session = guidedSession || existing?.guided_session;
-    const script =
-      session?.personalizedScript ||
-      session?.segments?.find((s) => s.kind === "personalized")?.text || "";
+
+    if (!session) {
+      return res.status(400).json({ error: "No hay sesión guiada para generar audio." });
+    }
+
+    const script = session?.speechScript || buildMeditationSpeechScript(session);
 
     if (!script) {
       return res.status(400).json({ error: "No hay script para generar audio." });
     }
+
+    const sessionWithSpeechScript = {
+      ...session,
+      speechScript: script,
+      audioRenderVersion: MEDITATION_AUDIO_RENDER_VERSION,
+    };
 
     const audioBuffer = await generateSpeech({
       text: applyPauseMarkers(script),
@@ -237,7 +251,13 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
     const { data: urlData } = supabase.storage.from("audio").getPublicUrl(filename);
     const audioUrl = urlData.publicUrl;
 
-    await supabase.from("rituals").update({ audio_url: audioUrl }).eq("id", id);
+    await supabase
+      .from("rituals")
+      .update({
+        audio_url: audioUrl,
+        guided_session: sessionWithSpeechScript,
+      })
+      .eq("id", id);
 
     res.json({
       audioUrl,

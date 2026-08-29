@@ -51,11 +51,3 @@ Máximo dos frases cortas. Sin comillas.`,
 
   return message.content[0].text.trim();
 }
-
-export function applyPauseMarkers(script) {
-  return script
-    .replace(/\[P1\]/g, "... ")
-    .replace(/\[P2\]/g, "... ... ")
-    .replace(/\[P3\]/g, "... ... ... ")
-    .replace(/\[RESPIRA\]/g, "... inhala ... exhala ... ... ");
-}

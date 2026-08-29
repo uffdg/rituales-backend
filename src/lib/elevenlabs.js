@@ -25,7 +25,10 @@ export async function generateSpeech({
   const voice = voiceId || process.env.ELEVENLABS_VOICE_ID || "El3gkPAhMU9R5biL3rtU";
   const seed = buildSpeechSeed(`${voice}:${text}`);
 
-  const response = await fetch(`${ELEVENLABS_BASE}/text-to-speech/${voice}`, {
+  const url = new URL(`${ELEVENLABS_BASE}/text-to-speech/${voice}`);
+  url.searchParams.set("output_format", outputFormat);
+
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "xi-api-key": apiKey,
@@ -35,7 +38,6 @@ export async function generateSpeech({
       text,
       model_id: model,
       language_code: "es",
-      output_format: outputFormat,
       apply_text_normalization: "auto",
       seed,
       voice_settings: {
