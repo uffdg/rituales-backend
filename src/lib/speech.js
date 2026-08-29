@@ -7,6 +7,7 @@ export function applyPauseMarkers(script) {
       /\[RESPIRA\]/g,
       'Inhalá. <break time="2.0s" /> Exhalá. <break time="3.0s" />',
     )
+    .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 

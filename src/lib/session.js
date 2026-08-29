@@ -31,7 +31,7 @@ function buildPersonalizedScript(input, ritual) {
     .join("\n\n");
 }
 
-function addMeditationPacing(text = "") {
+function splitIntoMeditationLines(text = "") {
   if (!text.trim()) return "";
   if (/\[(?:P1|P2|P3|RESPIRA|PAUSA_CORTA|PAUSA_MEDIA|PAUSA_LARGA)\]/.test(text)) {
     return text;
@@ -39,20 +39,45 @@ function addMeditationPacing(text = "") {
 
   return text
     .split(/\n{2,}/)
-    .map((paragraph) =>
-      paragraph
+    .map((paragraph) => {
+      const sentences = paragraph
         .trim()
-        .replace(/([.!?])\s+/g, "$1 [P1] ")
-        .replace(/([.!?])$/g, "$1 [P2]"),
-    )
+        .split(/(?<=[.!?])\s+/)
+        .flatMap((sentence) => {
+          const clean = sentence.trim();
+          if (clean.length <= 85) return [clean];
+
+          return clean
+            .split(/,\s+/)
+            .map((part, index, parts) => index < parts.length - 1 ? `${part.trim()},` : part.trim())
+            .filter(Boolean);
+        });
+
+      return sentences.join("\n[P2]\n");
+    })
     .filter(Boolean)
-    .join("\n\n");
+    .join("\n[P3]\n");
+}
+
+function buildOpeningScript() {
+  return [
+    "Antes de empezar.",
+    "[P3]",
+    "Acomodá el cuerpo.",
+    "[P2]",
+    "Cerrá los ojos.",
+    "[P2]",
+    "Inhalá.",
+    "[P3]",
+    "Exhalá.",
+    "[P3]",
+    "No hace falta resolver todo ahora.",
+    "[P2]",
+    "Solo entrá en este momento.",
+  ].join("\n");
 }
 
 export function buildMeditationSpeechScript(session) {
-  const intro =
-    session?.segments?.find((segment) => segment.kind === "intro")?.text ||
-    "Cerrá los ojos. Respirá profundo. No hace falta resolver todo ahora. Solo entrá en este momento.";
   const personalized =
     session?.personalizedScript ||
     session?.segments?.find((segment) => segment.kind === "personalized")?.text ||
@@ -62,12 +87,12 @@ export function buildMeditationSpeechScript(session) {
     "Volvé despacio. Quedate con una sola palabra. Llevá esta intención con vos.";
 
   return [
-    `${addMeditationPacing(sanitizeForSpeech(intro))} [RESPIRA]`,
-    addMeditationPacing(personalized),
-    addMeditationPacing(sanitizeForSpeech(closing)).replace(/\[P2\]$/, "[P3]"),
+    buildOpeningScript(),
+    splitIntoMeditationLines(personalized),
+    splitIntoMeditationLines(sanitizeForSpeech(closing)),
   ]
     .filter(Boolean)
-    .join("\n\n");
+    .join("\n[P3]\n");
 }
 
 export function buildGuidedSession(input, ritual) {
