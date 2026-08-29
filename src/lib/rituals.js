@@ -25,7 +25,7 @@ export function mapRitualRow(row, options = {}) {
     ritualId: row.id,
     ritual: buildAiRitualFromRow(row),
     guidedSession: row.guided_session,
-    guidedAudio: row.audio_url && row.guided_session?.audioRenderVersion === MEDITATION_AUDIO_RENDER_VERSION
+    guidedAudio: row.audio_url && row.guided_session?.audioRenderVersion >= MEDITATION_AUDIO_RENDER_VERSION
       ? {
           status: "ready",
           audioUrl: row.audio_url,

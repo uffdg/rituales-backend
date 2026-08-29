@@ -54,7 +54,7 @@ Routes that need auth use `requireUser` middleware. Routes like `rituals/create`
 
 ### Audio
 
-`src/lib/elevenlabs.js` — `generateSpeech({ text, voiceId })`. Script is processed through `applyPauseMarkers` before being sent. Voice: `El3gkPAhMU9R5biL3rtU`. Audio is uploaded to Supabase Storage bucket `audio` and the public URL is cached in `rituals.audio_url`. `guided_session.speechScript` stores the exact meditation script used for TTS, and `guided_session.audioRenderVersion` marks which pacing system produced the cached audio; old versions are regenerated once, then reused.
+`src/lib/elevenlabs.js` — `generateSpeech({ text, voiceId })` for plain TTS and `generateMeditationSpeech({ script, voiceId })` for guided rituals. Guided rituals are generated as PCM fragments and assembled into a WAV with deterministic silence between fragments, so meditation pacing does not depend only on ElevenLabs interpreting SSML pauses. Voice: `El3gkPAhMU9R5biL3rtU`. Audio is uploaded to Supabase Storage bucket `audio` and the public URL is cached in `rituals.audio_url`. `guided_session.speechScript` stores the exact meditation script used for TTS, and `guided_session.audioRenderVersion` marks which pacing system produced the cached audio; old versions are regenerated manually via admin token, then reused.
 
 ### Database
 

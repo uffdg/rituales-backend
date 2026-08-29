@@ -1,11 +1,10 @@
 import { Router } from "express";
 import { getAuthenticatedUser, requireUser } from "../lib/auth.js";
 import { supabase } from "../lib/supabase.js";
-import { generateSpeech } from "../lib/elevenlabs.js";
+import { generateMeditationSpeech } from "../lib/elevenlabs.js";
 import { mapRitualRow } from "../lib/rituals.js";
 import { buildGuidedSession, buildMeditationSpeechScript } from "../lib/session.js";
 import { generateRitualWithClaude, reframeIntention } from "../lib/claude.js";
-import { applyPauseMarkers } from "../lib/speech.js";
 
 export const ritualsRouter = Router();
 const MEDITATION_AUDIO_RENDER_VERSION = 2;
@@ -188,15 +187,12 @@ ritualsRouter.delete("/:id/like", requireUser, async (req, res, next) => {
 ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { voice, guidedSession, model, responseFormat } = req.body;
+    const { voice, guidedSession, model } = req.body;
     const forceRegenerate =
       req.body.force === true &&
       process.env.AUDIO_RENDER_ADMIN_TOKEN &&
       req.get("x-audio-render-admin-token") === process.env.AUDIO_RENDER_ADMIN_TOKEN;
     const audioModel = model || "eleven_multilingual_v2";
-    const outputFormat = responseFormat === "mp3" || !responseFormat
-      ? "mp3_44100_128"
-      : responseFormat;
     const voiceId = voice || process.env.ELEVENLABS_VOICE_ID || "El3gkPAhMU9R5biL3rtU";
 
     // Devolver audio cacheado si ya existe, y traer guided_session como fallback
@@ -208,7 +204,7 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
 
     if (
       existing?.audio_url &&
-      existing?.guided_session?.audioRenderVersion === MEDITATION_AUDIO_RENDER_VERSION &&
+      existing?.guided_session?.audioRenderVersion >= MEDITATION_AUDIO_RENDER_VERSION &&
       !forceRegenerate
     ) {
       return res.json({
@@ -242,17 +238,19 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
       audioRenderVersion: MEDITATION_AUDIO_RENDER_VERSION,
     };
 
-    const audioBuffer = await generateSpeech({
-      text: applyPauseMarkers(script),
+    const renderedAudio = await generateMeditationSpeech({
+      script,
       voiceId,
       model: audioModel,
-      outputFormat,
     });
 
-    const filename = `rituals/${id}/audio.mp3`;
+    const filename = `rituals/${id}/audio.${renderedAudio.extension}`;
     const { error: uploadError } = await supabase.storage
       .from("audio")
-      .upload(filename, audioBuffer, { contentType: "audio/mpeg", upsert: true });
+      .upload(filename, renderedAudio.audioBuffer, {
+        contentType: renderedAudio.contentType,
+        upsert: true,
+      });
 
     if (uploadError) throw uploadError;
 
@@ -263,7 +261,10 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
       .from("rituals")
       .update({
         audio_url: audioUrl,
-        guided_session: sessionWithSpeechScript,
+        guided_session: {
+          ...sessionWithSpeechScript,
+          audioParts: renderedAudio.parts,
+        },
       })
       .eq("id", id);
 

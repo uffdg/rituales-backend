@@ -1,4 +1,8 @@
+import { parseMeditationScript } from "./speech.js";
+
 const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1";
+const PCM_SAMPLE_RATE = 24000;
+const PCM_BYTES_PER_SAMPLE = 2;
 
 function buildSpeechSeed(text) {
   let hash = 0;
@@ -62,4 +66,63 @@ export async function generateSpeech({
   }
 
   return response.arrayBuffer();
+}
+
+function createSilencePcm(durationMs) {
+  const samples = Math.round((PCM_SAMPLE_RATE * durationMs) / 1000);
+  return Buffer.alloc(samples * PCM_BYTES_PER_SAMPLE);
+}
+
+function buildWavFromPcm(chunks) {
+  const data = Buffer.concat(chunks);
+  const header = Buffer.alloc(44);
+  const byteRate = PCM_SAMPLE_RATE * PCM_BYTES_PER_SAMPLE;
+  const blockAlign = PCM_BYTES_PER_SAMPLE;
+
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + data.length, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(PCM_SAMPLE_RATE, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(data.length, 40);
+
+  return Buffer.concat([header, data]);
+}
+
+export async function generateMeditationSpeech({
+  script,
+  voiceId,
+  model = "eleven_multilingual_v2",
+}) {
+  const parts = parseMeditationScript(script);
+  const chunks = [];
+
+  for (const part of parts) {
+    if (part.type === "silence") {
+      chunks.push(createSilencePcm(part.durationMs));
+      continue;
+    }
+
+    const audio = await generateSpeech({
+      text: part.text,
+      voiceId,
+      model,
+      outputFormat: "pcm_24000",
+    });
+    chunks.push(Buffer.from(audio));
+  }
+
+  return {
+    audioBuffer: buildWavFromPcm(chunks),
+    contentType: "audio/wav",
+    extension: "wav",
+    parts,
+  };
 }
