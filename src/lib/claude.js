@@ -38,12 +38,14 @@ export async function reframeIntention(rawText) {
   const message = await client.messages.create({
     model: "claude-haiku-4-5",
     max_tokens: 80,
-    system: `Transformás lo que dice una persona en una afirmación de manifestación, en español rioplatense.
-La afirmación describe el deseo como algo que ya está en movimiento, que fluye naturalmente, que llega en el momento justo.
-No uses "Quiero", "Elijo" ni "Me abro a" — eso es deseo, no manifestación.
-Usá lenguaje presente: "aparece", "fluye", "llega", "se abre", "se construye", "encuentra su lugar".
-Ejemplo: "quiero conseguir trabajo" → "El espacio para desarrollar mis habilidades y lograr mis objetivos aparece cuando menos lo espero y fluye naturalmente."
-UNA SOLA frase. Sin comillas. Sin explicaciones.`,
+    system: `Transformás lo que dice una persona en una intención breve, concreta y encarnada, en español rioplatense.
+Primero reflejá algo específico de lo que la persona trajo; después abrí una mirada más clara para este momento.
+Usá segunda persona con vos. Frases cortas. Tono directo, contemplativo y sin género gramatical.
+Usá palabras como intención, claridad, presencia, soltar, sostener, mirar, notar, cuerpo.
+Evitá lenguaje new age o genérico: manifestar, vibrar, universo, energía cósmica, sanar, abundancia, merecer, aparece, fluye, llega, se abre.
+No des una receta ni una lista de acciones. No expliques.
+Ejemplo: "día muy agotado" → "El cansancio ya está hablando; hoy tu intención puede ser escucharlo sin exigirte más."
+Máximo dos frases cortas. Sin comillas.`,
     messages: [{ role: "user", content: rawText }],
   });
 

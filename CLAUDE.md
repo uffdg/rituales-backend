@@ -13,7 +13,7 @@ No lint or test commands configured.
 
 ## Architecture
 
-Express API for the Rituales app. Deployed on Vercel at `https://rituales-backend.vercel.app`.
+Express API for the Rituales app, ESM throughout (`"type": "module"`). Deployed on Vercel at `https://rituales-backend.vercel.app` (see `vercel.json`); a `railway.json` is also present as an alternate deploy target but Vercel is the one currently referenced by the app.
 
 ### Routes
 
@@ -21,10 +21,14 @@ Express API for the Rituales app. Deployed on Vercel at `https://rituales-backen
 - `POST /api/rituals/reframe-intention` — reframes raw voice input into a manifestation affirmation (Claude Haiku)
 - `POST /api/rituals/create` — generates ritual text (Claude Haiku) + builds guided session plan, persists to Supabase
 - `POST /api/rituals/:id/render-audio` — generates TTS via ElevenLabs, uploads to Supabase Storage, caches `audio_url`
-- `GET  /api/rituals/:id` — fetch a single ritual
+- `GET  /api/rituals/:id` — fetch a single ritual, including viewer-relative `likesCount`/`likedByViewer`/`favoritedByViewer`
+- `POST /DELETE /api/rituals/:id/favorite` — toggle the authenticated user's favorite (requires auth)
+- `POST /DELETE /api/rituals/:id/like` — toggle the authenticated user's like; a ritual's own author can't like it (requires auth)
 - `POST /api/events` — analytics event ingestion
 - `GET  /api/me/dashboard` — authenticated user's own rituals + favorites + likes received
 - `PATCH /api/me/profile` — update user's full name
+
+All routes funnel through a single error-handling middleware in `src/index.js` that logs and returns `{ error }` as JSON — route handlers just call `next(err)`.
 
 ### Auth
 
@@ -42,6 +46,10 @@ Routes that need auth use `requireUser` middleware. Routes like `rituals/create`
 - `applyPauseMarkers(script)` → converts `[P1]`/`[P2]`/`[P3]`/`[RESPIRA]` to `...` sequences for ElevenLabs pacing
 
 `src/lib/session.js` — `buildGuidedSession(input, ritual)` builds the structured session plan with timed segments (intro, personalized, ambient, closing). The personalized script is the only segment sent to TTS.
+
+`src/lib/gemini.js` exports `generateRitualWithGemini`, a Gemini-based equivalent of `generateRitualWithClaude`. It is currently unused by any route — `rituals/create` generates with Claude only, despite a stale comment in `src/routes/rituals.js` referencing Gemini.
+
+`src/lib/rituals.js` — `mapRitualRow(row, options)` shapes a `rituals` DB row into the API response shape (nesting `ritual`, `guidedAudio` status, likes/favorites flags). Used by both `GET /api/rituals/:id` and the `/api/me/dashboard` route.
 
 ### Audio
 
@@ -61,9 +69,12 @@ Schema in `supabase/schema.sql`. Key tables:
 ```
 ANTHROPIC_API_KEY=...
 ELEVENLABS_API_KEY=...
+ELEVENLABS_VOICE_ID=...         # optional, falls back to a hardcoded voice id
 SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...   # Used for auth.admin calls and storage
 PORT=3000
 ```
 
 Note: uses **service role key**, not anon key — required for `supabase.auth.admin.updateUserById()` and storage uploads.
+
+`ANTHROPIC_API_KEY` is checked at runtime in `rituals/create` — if unset, ritual generation silently falls back to whatever template the frontend sent. `ELEVENLABS_API_KEY` is required for `/api/rituals/:id/render-audio`; keep it only in the backend deploy environment, never as a `VITE_*` frontend variable. A `GEMINI_API_KEY` would also be needed to exercise `src/lib/gemini.js`, but nothing currently calls it.

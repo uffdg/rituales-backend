@@ -10,7 +10,16 @@ function buildSpeechSeed(text) {
   return hash || 1;
 }
 
-export async function generateSpeech({ text, voiceId }) {
+export async function generateSpeech({
+  text,
+  voiceId,
+  model = "eleven_multilingual_v2",
+  outputFormat = "mp3_44100_128",
+}) {
+  if (!process.env.ELEVENLABS_API_KEY) {
+    throw new Error("Missing ELEVENLABS_API_KEY in backend environment.");
+  }
+
   const voice = voiceId || process.env.ELEVENLABS_VOICE_ID || "El3gkPAhMU9R5biL3rtU";
   const seed = buildSpeechSeed(`${voice}:${text}`);
 
@@ -22,9 +31,9 @@ export async function generateSpeech({ text, voiceId }) {
     },
     body: JSON.stringify({
       text,
-      model_id: "eleven_multilingual_v2",
+      model_id: model,
       language_code: "es",
-      output_format: "mp3_44100_128",
+      output_format: outputFormat,
       apply_text_normalization: "auto",
       seed,
       voice_settings: {

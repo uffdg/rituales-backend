@@ -186,7 +186,12 @@ ritualsRouter.delete("/:id/like", requireUser, async (req, res, next) => {
 ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { voice, guidedSession } = req.body;
+    const { voice, guidedSession, model, responseFormat } = req.body;
+    const audioModel = model || "eleven_multilingual_v2";
+    const outputFormat = responseFormat === "mp3" || !responseFormat
+      ? "mp3_44100_128"
+      : responseFormat;
+    const voiceId = voice || process.env.ELEVENLABS_VOICE_ID || "El3gkPAhMU9R5biL3rtU";
 
     // Devolver audio cacheado si ya existe, y traer guided_session como fallback
     const { data: existing } = await supabase
@@ -200,6 +205,8 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
         audioUrl: existing.audio_url,
         status: "ready",
         provider: "elevenlabs",
+        voice: voiceId,
+        model: audioModel,
         cached: true,
       });
     }
@@ -213,7 +220,12 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
       return res.status(400).json({ error: "No hay script para generar audio." });
     }
 
-    const audioBuffer = await generateSpeech({ text: applyPauseMarkers(script), voiceId: voice });
+    const audioBuffer = await generateSpeech({
+      text: applyPauseMarkers(script),
+      voiceId,
+      model: audioModel,
+      outputFormat,
+    });
 
     const filename = `rituals/${id}/audio.mp3`;
     const { error: uploadError } = await supabase.storage
@@ -227,7 +239,14 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
 
     await supabase.from("rituals").update({ audio_url: audioUrl }).eq("id", id);
 
-    res.json({ audioUrl, status: "ready", provider: "elevenlabs", cached: false });
+    res.json({
+      audioUrl,
+      status: "ready",
+      provider: "elevenlabs",
+      voice: voiceId,
+      model: audioModel,
+      cached: false,
+    });
   } catch (err) {
     next(err);
   }
