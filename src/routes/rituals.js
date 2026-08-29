@@ -188,12 +188,23 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
   try {
     const { id } = req.params;
     const { voice, guidedSession, model } = req.body;
+    const wantsForce = req.body.force === true;
+    const configuredAdminToken = process.env.AUDIO_RENDER_ADMIN_TOKEN?.trim();
+    const requestAdminToken = req.get("x-audio-render-admin-token")?.trim();
     const forceRegenerate =
-      req.body.force === true &&
-      process.env.AUDIO_RENDER_ADMIN_TOKEN &&
-      req.get("x-audio-render-admin-token") === process.env.AUDIO_RENDER_ADMIN_TOKEN;
+      wantsForce &&
+      configuredAdminToken &&
+      requestAdminToken === configuredAdminToken;
     const audioModel = model || "eleven_multilingual_v2";
     const voiceId = voice || process.env.ELEVENLABS_VOICE_ID || "El3gkPAhMU9R5biL3rtU";
+
+    if (wantsForce && !forceRegenerate) {
+      return res.status(403).json({
+        error: configuredAdminToken
+          ? "Token admin de audio inválido."
+          : "AUDIO_RENDER_ADMIN_TOKEN no está configurado en producción.",
+      });
+    }
 
     // Devolver audio cacheado si ya existe, y traer guided_session como fallback
     const { data: existing } = await supabase
@@ -274,6 +285,7 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
       provider: "elevenlabs",
       voice: voiceId,
       model: audioModel,
+      forced: forceRegenerate,
       cached: false,
     });
   } catch (err) {
