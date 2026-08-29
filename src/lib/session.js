@@ -77,6 +77,10 @@ function buildOpeningScript() {
   ].join("\n");
 }
 
+function buildClosingCadenceScript() {
+  return "No hay nada más que hacer. Por hoy, alcanza.";
+}
+
 export function buildMeditationSpeechScript(session) {
   const personalized =
     session?.personalizedScript ||
@@ -90,6 +94,7 @@ export function buildMeditationSpeechScript(session) {
     buildOpeningScript(),
     splitIntoMeditationLines(personalized),
     splitIntoMeditationLines(sanitizeForSpeech(closing)),
+    buildClosingCadenceScript(),
   ]
     .filter(Boolean)
     .join("\n[P3]\n");
