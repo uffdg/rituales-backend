@@ -16,7 +16,9 @@ export async function generateSpeech({
   model = "eleven_multilingual_v2",
   outputFormat = "mp3_44100_128",
 }) {
-  if (!process.env.ELEVENLABS_API_KEY) {
+  const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
+
+  if (!apiKey) {
     throw new Error("Missing ELEVENLABS_API_KEY in backend environment.");
   }
 
@@ -26,7 +28,7 @@ export async function generateSpeech({
   const response = await fetch(`${ELEVENLABS_BASE}/text-to-speech/${voice}`, {
     method: "POST",
     headers: {
-      "xi-api-key": process.env.ELEVENLABS_API_KEY,
+      "xi-api-key": apiKey,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -48,7 +50,13 @@ export async function generateSpeech({
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`ElevenLabs error: ${error}`);
+    console.error("ElevenLabs error", response.status, error);
+
+    if (response.status === 401) {
+      throw new Error("ElevenLabs API key inválida. Revisá ELEVENLABS_API_KEY en Vercel.");
+    }
+
+    throw new Error("No pudimos generar el audio guiado. Probá de nuevo.");
   }
 
   return response.arrayBuffer();
