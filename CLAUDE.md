@@ -79,3 +79,5 @@ PORT=3000
 Note: uses **service role key**, not anon key — required for `supabase.auth.admin.updateUserById()` and storage uploads.
 
 `ANTHROPIC_API_KEY` is checked at runtime in `rituals/create` — if unset, ritual generation silently falls back to whatever template the frontend sent. `ELEVENLABS_API_KEY` is required for `/api/rituals/:id/render-audio`; keep it only in the backend deploy environment, never as a `VITE_*` frontend variable. A `GEMINI_API_KEY` would also be needed to exercise `src/lib/gemini.js`, but nothing currently calls it.
+
+`AUDIO_RENDER_ADMIN_TOKEN` optionally enables manual one-off audio regeneration for a cached ritual. Send `force: true` with header `x-audio-render-admin-token`; otherwise cached `audio_url` is always reused.

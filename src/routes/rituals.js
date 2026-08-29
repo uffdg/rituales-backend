@@ -189,6 +189,10 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
   try {
     const { id } = req.params;
     const { voice, guidedSession, model, responseFormat } = req.body;
+    const forceRegenerate =
+      req.body.force === true &&
+      process.env.AUDIO_RENDER_ADMIN_TOKEN &&
+      req.get("x-audio-render-admin-token") === process.env.AUDIO_RENDER_ADMIN_TOKEN;
     const audioModel = model || "eleven_multilingual_v2";
     const outputFormat = responseFormat === "mp3" || !responseFormat
       ? "mp3_44100_128"
@@ -204,7 +208,8 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
 
     if (
       existing?.audio_url &&
-      existing?.guided_session?.audioRenderVersion === MEDITATION_AUDIO_RENDER_VERSION
+      existing?.guided_session?.audioRenderVersion === MEDITATION_AUDIO_RENDER_VERSION &&
+      !forceRegenerate
     ) {
       return res.json({
         audioUrl: existing.audio_url,
@@ -222,7 +227,10 @@ ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
       return res.status(400).json({ error: "No hay sesión guiada para generar audio." });
     }
 
-    const script = session?.speechScript || buildMeditationSpeechScript(session);
+    const script =
+      !forceRegenerate && session?.speechScript
+        ? session.speechScript
+        : buildMeditationSpeechScript(session);
 
     if (!script) {
       return res.status(400).json({ error: "No hay script para generar audio." });

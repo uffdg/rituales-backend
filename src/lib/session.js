@@ -31,6 +31,24 @@ function buildPersonalizedScript(input, ritual) {
     .join("\n\n");
 }
 
+function addMeditationPacing(text = "") {
+  if (!text.trim()) return "";
+  if (/\[(?:P1|P2|P3|RESPIRA|PAUSA_CORTA|PAUSA_MEDIA|PAUSA_LARGA)\]/.test(text)) {
+    return text;
+  }
+
+  return text
+    .split(/\n{2,}/)
+    .map((paragraph) =>
+      paragraph
+        .trim()
+        .replace(/([.!?])\s+/g, "$1 [P1] ")
+        .replace(/([.!?])$/g, "$1 [P2]"),
+    )
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export function buildMeditationSpeechScript(session) {
   const intro =
     session?.segments?.find((segment) => segment.kind === "intro")?.text ||
@@ -44,9 +62,9 @@ export function buildMeditationSpeechScript(session) {
     "Volvé despacio. Quedate con una sola palabra. Llevá esta intención con vos.";
 
   return [
-    `${sanitizeForSpeech(intro)} [RESPIRA]`,
-    personalized,
-    `${sanitizeForSpeech(closing)} [P3]`,
+    `${addMeditationPacing(sanitizeForSpeech(intro))} [RESPIRA]`,
+    addMeditationPacing(personalized),
+    addMeditationPacing(sanitizeForSpeech(closing)).replace(/\[P2\]$/, "[P3]"),
   ]
     .filter(Boolean)
     .join("\n\n");
