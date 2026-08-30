@@ -47,7 +47,7 @@ export async function generateSpeech({
       voice_settings: {
         stability: 0.78,
         similarity_boost: 0.72,
-        speed: 0.7,
+        speed: 0.8,
         style: 0,
         use_speaker_boost: false,
       },

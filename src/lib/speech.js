@@ -1,8 +1,8 @@
 const PAUSE_DURATIONS_MS = {
-  P1: 1800,
-  P2: 3500,
-  P3: 5500,
-  RESPIRA: 6000,
+  P1: 200,
+  P2: 300,
+  P3: 400,
+  RESPIRA: 500,
 };
 
 export function applyPauseMarkers(script) {
