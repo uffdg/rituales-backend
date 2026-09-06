@@ -16,7 +16,10 @@ create table if not exists rituals (
   anchor         text,
   ai_ritual      jsonb,
   guided_session jsonb,
-  audio_url      text
+  audio_url      text,
+  audio_completed_at timestamptz,
+  anchor_confirmed_at timestamptz,
+  reflection_text text
 );
 
 alter table rituals add column if not exists user_id uuid references auth.users(id) on delete set null;
@@ -25,6 +28,9 @@ alter table rituals add column if not exists intention_category text;
 alter table rituals add column if not exists ai_ritual jsonb;
 alter table rituals add column if not exists guided_session jsonb;
 alter table rituals add column if not exists audio_url text;
+alter table rituals add column if not exists audio_completed_at timestamptz;
+alter table rituals add column if not exists anchor_confirmed_at timestamptz;
+alter table rituals add column if not exists reflection_text text;
 
 -- Favoritos del usuario
 create table if not exists ritual_favorites (

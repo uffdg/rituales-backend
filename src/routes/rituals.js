@@ -183,6 +183,55 @@ ritualsRouter.delete("/:id/like", requireUser, async (req, res, next) => {
   }
 });
 
+// PATCH /api/rituals/:id/complete
+ritualsRouter.patch("/:id/complete", requireUser, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { audioCompleted, anchorConfirmed, reflectionText } = req.body;
+
+    const { data: ritual, error: ritualError } = await supabase
+      .from("rituals")
+      .select("id, user_id")
+      .eq("id", id)
+      .single();
+
+    if (ritualError || !ritual) {
+      return res.status(404).json({ error: "Ritual no encontrado." });
+    }
+
+    if (ritual.user_id !== req.user.id) {
+      return res.status(403).json({ error: "Solo podés cerrar rituales propios." });
+    }
+
+    const now = new Date().toISOString();
+    const updates = {};
+
+    if (audioCompleted === true) updates.audio_completed_at = now;
+    if (anchorConfirmed === true) updates.anchor_confirmed_at = now;
+    if (typeof reflectionText === "string") {
+      const trimmed = reflectionText.trim();
+      updates.reflection_text = trimmed || null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No hay datos de cierre para guardar." });
+    }
+
+    const { data, error } = await supabase
+      .from("rituals")
+      .update(updates)
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) throw error;
+
+    res.json(mapRitualRow(data));
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/rituals/:id/render-audio
 ritualsRouter.post("/:id/render-audio", async (req, res, next) => {
   try {

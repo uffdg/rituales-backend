@@ -44,5 +44,8 @@ export function mapRitualRow(row, options = {}) {
     favoritedByViewer,
     createdAt: row.created_at,
     userId: row.user_id || null,
+    audioCompletedAt: row.audio_completed_at || null,
+    anchorConfirmedAt: row.anchor_confirmed_at || null,
+    reflectionText: row.reflection_text || null,
   };
 }
