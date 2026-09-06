@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireUser } from "../lib/auth.js";
+import { mapDailyIntentionCardRow } from "../lib/daily-intention-cards.js";
 import { mapRitualRow } from "../lib/rituals.js";
 import { supabase } from "../lib/supabase.js";
 
@@ -27,6 +28,119 @@ async function getLikesCountMap(ritualIds) {
 function isMissingTableError(error) {
   return error?.code === "PGRST205";
 }
+
+function isValidDateKey(dateKey) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(`${dateKey || ""}`);
+}
+
+async function getDailyIntentionCard(userId, dateKey) {
+  const { data, error } = await supabase
+    .from("daily_intention_cards")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("date_key", dateKey)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
+meRouter.get("/daily-card", requireUser, async (req, res, next) => {
+  try {
+    const dateKey = `${req.query.date || ""}`.trim();
+
+    if (!isValidDateKey(dateKey)) {
+      return res.status(400).json({ error: "Fecha inválida." });
+    }
+
+    const card = await getDailyIntentionCard(req.user.id, dateKey);
+    res.json({ card: mapDailyIntentionCardRow(card) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+meRouter.post("/daily-card", requireUser, async (req, res, next) => {
+  try {
+    const dateKey = `${req.body?.dateKey || ""}`.trim();
+    const intentionText = `${req.body?.intentionText || ""}`.trim();
+    const feeling =
+      typeof req.body?.feeling === "string" && req.body.feeling.trim()
+        ? req.body.feeling.trim()
+        : null;
+
+    if (!isValidDateKey(dateKey)) {
+      return res.status(400).json({ error: "Fecha inválida." });
+    }
+
+    if (!intentionText) {
+      return res.status(400).json({ error: "La intención es requerida." });
+    }
+
+    const { data, error } = await supabase
+      .from("daily_intention_cards")
+      .insert({
+        user_id: req.user.id,
+        date_key: dateKey,
+        intention_text: intentionText,
+        feeling,
+      })
+      .select("*")
+      .single();
+
+    if (!error) {
+      return res.status(201).json({
+        card: mapDailyIntentionCardRow(data),
+        created: true,
+      });
+    }
+
+    if (error.code !== "23505") {
+      throw error;
+    }
+
+    const existing = await getDailyIntentionCard(req.user.id, dateKey);
+    res.json({
+      card: mapDailyIntentionCardRow(existing),
+      created: false,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+meRouter.patch("/daily-card", requireUser, async (req, res, next) => {
+  try {
+    const dateKey = `${req.body?.dateKey || ""}`.trim();
+    const feeling =
+      typeof req.body?.feeling === "string" && req.body.feeling.trim()
+        ? req.body.feeling.trim()
+        : null;
+
+    if (!isValidDateKey(dateKey)) {
+      return res.status(400).json({ error: "Fecha inválida." });
+    }
+
+    const existing = await getDailyIntentionCard(req.user.id, dateKey);
+    if (!existing) {
+      return res.status(404).json({ error: "Todavía no elegiste tu carta de hoy." });
+    }
+
+    const { data, error } = await supabase
+      .from("daily_intention_cards")
+      .update({ feeling })
+      .eq("user_id", req.user.id)
+      .eq("date_key", dateKey)
+      .select("*")
+      .single();
+
+    if (error) throw error;
+
+    res.json({ card: mapDailyIntentionCardRow(data) });
+  } catch (error) {
+    next(error);
+  }
+});
 
 meRouter.get("/dashboard", requireUser, async (req, res, next) => {
   try {

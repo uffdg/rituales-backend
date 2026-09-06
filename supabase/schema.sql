@@ -53,6 +53,25 @@ create table if not exists events (
   props      jsonb default '{}'::jsonb
 );
 
+-- Carta de intención diaria (paso "Inicio" del Diario de Anclas)
+create table if not exists daily_intention_cards (
+  id             uuid primary key default gen_random_uuid(),
+  created_at     timestamptz default now(),
+  user_id        uuid not null references auth.users(id) on delete cascade,
+  date_key       text not null,
+  intention_text text not null,
+  feeling        text,
+  unique (user_id, date_key)
+);
+
+alter table daily_intention_cards enable row level security;
+
+drop policy if exists "Users manage their own daily intention card" on daily_intention_cards;
+create policy "Users manage their own daily intention card"
+  on daily_intention_cards for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
 -- Índices básicos
 create index if not exists events_event_idx on events(event);
 create index if not exists events_created_at_idx on events(created_at);
@@ -62,3 +81,5 @@ create index if not exists ritual_favorites_user_id_idx on ritual_favorites(user
 create index if not exists ritual_favorites_ritual_id_idx on ritual_favorites(ritual_id);
 create index if not exists ritual_likes_user_id_idx on ritual_likes(user_id);
 create index if not exists ritual_likes_ritual_id_idx on ritual_likes(ritual_id);
+create index if not exists daily_intention_cards_user_id_idx on daily_intention_cards(user_id);
+create index if not exists daily_intention_cards_date_key_idx on daily_intention_cards(date_key);
