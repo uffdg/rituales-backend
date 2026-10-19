@@ -59,7 +59,7 @@ create table if not exists events (
   props      jsonb default '{}'::jsonb
 );
 
--- Carta de intención diaria (paso "Inicio" del Diario de Anclas)
+-- Carta del Oráculo del día (una por persona por día)
 create table if not exists daily_intention_cards (
   id             uuid primary key default gen_random_uuid(),
   created_at     timestamptz default now(),
@@ -69,6 +69,12 @@ create table if not exists daily_intention_cards (
   feeling        text,
   unique (user_id, date_key)
 );
+
+-- Oráculo del día: carta del mazo curado (src/lib/oracle-deck.js), lo que contó
+-- la persona (input_text), la intención reencuadrada y el gesto personalizado
+alter table daily_intention_cards add column if not exists card_id text;
+alter table daily_intention_cards add column if not exists gesture text;
+alter table daily_intention_cards add column if not exists input_text text;
 
 alter table daily_intention_cards enable row level security;
 

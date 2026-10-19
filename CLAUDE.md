@@ -28,6 +28,7 @@ Express API for the Rituales app, ESM throughout (`"type": "module"`). Deployed 
 - `POST /api/events` — analytics event ingestion
 - `GET  /api/me/dashboard` — authenticated user's own rituals + favorites + likes received
 - `PATCH /api/me/profile` — update user's full name
+- `GET /POST /api/me/daily-card` — the "Oráculo del día": `GET` returns the user's card for a date, `POST` takes the user's `inputText`, reframes it into the card's intention and draws a card (one per user per day); requires auth
 
 All routes funnel through a single error-handling middleware in `src/index.js` that logs and returns `{ error }` as JSON — route handlers just call `next(err)`.
 
@@ -47,6 +48,8 @@ Routes that need auth use `requireUser` middleware. Routes like `rituals/create`
 - `src/lib/speech.js`:
   - `applyPauseMarkers(script)` → converts `[P1]`/`[P2]`/`[P3]`/`[RESPIRA]` and `[PAUSA_*]` markers to ElevenLabs SSML `<break time="..." />` tags for meditation pacing
 
+`src/lib/oracle-deck.js` — the curated Oráculo del día deck (team-written text). `drawOracleCard` weights cards matching the client-sent moon phase 3x and skips the user's last 7 cards. The deck supplies the card's name/symbol; the intention comes from `reframeIntention(inputText)` and the gesture from `generateOracleGesture` (both in `src/lib/claude.js`, run in parallel; the gesture has a 6s timeout and falls back to the card's curated gesture).
+
 `src/lib/session.js` — `buildGuidedSession(input, ritual)` builds the structured session plan with timed segments (intro, personalized, ambient, closing). The personalized script is the only segment sent to TTS.
 
 `src/lib/gemini.js` exports `generateRitualWithGemini`, a Gemini-based equivalent of `generateRitualWithClaude`. It is currently unused by any route — `rituals/create` generates with Claude only, despite a stale comment in `src/routes/rituals.js` referencing Gemini.
@@ -65,12 +68,13 @@ Schema in `supabase/schema.sql`. Key tables:
 - `rituals` — main table, `user_id` nullable (anonymous rituals allowed)
 - `ritual_favorites` / `ritual_likes` — junction tables with unique constraint per user+ritual
 - `events` — analytics, `props` is JSONB
+- `daily_intention_cards` — one row per `(user_id, date_key)` (unique). `date_key` is a `YYYY-MM-DD` string supplied by the client (the user's local day), not derived server-side. `POST /api/me/daily-card` is idempotent: if a card exists for that date it returns it with `created: false` instead of drawing again. `card_id` points into the curated deck in `src/lib/oracle-deck.js` (the card's name/symbol come from the deck, not the DB); `input_text` (what the user said), `intention_text` (the `reframeIntention` output) and `gesture` are stored in the row. `feeling` is legacy and no longer written. Rows are shaped by `mapDailyIntentionCardRow` in `src/lib/daily-intention-cards.js`.
 
-**RLS**: Not yet enabled — pending activation (see Supabase security alert).
+**RLS**: Enabled only on `daily_intention_cards`; still pending on the other tables (see Supabase security alert). The backend uses the service role key, so RLS policies don't constrain these routes — ownership is enforced in the handlers by filtering on `req.user.id`.
 
 ### Docs
 
-`docs/` holds product/UX specs (e.g. `docs/ux-wtp-voz-guiada-bloqueante.md`, a willingness-to-pay experiment spec for guided-audio) — not API reference, but useful context for why a route or field exists.
+`docs/` holds product/UX specs (e.g. `docs/ux-wtp-voz-guiada-bloqueante.md`, a willingness-to-pay experiment spec for guided-audio; `docs/carta-del-dia-diario-intenciones-plan.md`, the original daily-card plan, superseded by `rituales-app/docs/oraculo-del-dia-propuesta.md`) — not API reference, but useful context for why a route or field exists.
 
 ## Environment Variables
 
