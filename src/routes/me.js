@@ -188,18 +188,15 @@ meRouter.post("/daily-oracle", requireUser, async (req, res, next) => {
       return res.status(400).json({ error: "Fecha inválida." });
     }
 
-    const existing = await tryDb(
-      "Daily oracle read",
-      () => getDailyRow("daily_oracle_cards", req.user.id, dateKey),
-      null,
-    );
+    const [existing, recentCardIds] = await Promise.all([
+      tryDb("Daily oracle read", () => getDailyRow("daily_oracle_cards", req.user.id, dateKey), null),
+      tryDb("Recent oracle cards read", () => getRecentCardIds(req.user.id), []),
+    ]);
     if (existing && mapDailyOracleRow(existing)) {
       return res.json({ card: mapDailyOracleRow(existing), created: false });
     }
 
-    const card = drawOracleCard({
-      excludeIds: await tryDb("Recent oracle cards read", () => getRecentCardIds(req.user.id), []),
-    });
+    const card = drawOracleCard({ excludeIds: recentCardIds });
 
     const newRow = { user_id: req.user.id, date_key: dateKey, card_id: card.id };
     const saved = await tryDb("Daily oracle save", () => insertDailyRow("daily_oracle_cards", newRow), null);
