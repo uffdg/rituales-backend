@@ -59,28 +59,42 @@ create table if not exists events (
   props      jsonb default '{}'::jsonb
 );
 
--- Carta del Oráculo del día (una por persona por día)
-create table if not exists daily_intention_cards (
+-- Intención del día: lo que la persona desea (input_text) y la intención
+-- que escribe reframeIntention. Una por persona por día.
+create table if not exists daily_intentions (
   id             uuid primary key default gen_random_uuid(),
   created_at     timestamptz default now(),
   user_id        uuid not null references auth.users(id) on delete cascade,
   date_key       text not null,
+  input_text     text not null,
   intention_text text not null,
-  feeling        text,
   unique (user_id, date_key)
 );
 
--- Oráculo del día: carta del mazo curado (src/lib/oracle-deck.js), lo que contó
--- la persona (input_text), la intención reencuadrada y el gesto personalizado
-alter table daily_intention_cards add column if not exists card_id text;
-alter table daily_intention_cards add column if not exists gesture text;
-alter table daily_intention_cards add column if not exists input_text text;
+alter table daily_intentions enable row level security;
 
-alter table daily_intention_cards enable row level security;
+drop policy if exists "Users manage their own daily intention" on daily_intentions;
+create policy "Users manage their own daily intention"
+  on daily_intentions for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
-drop policy if exists "Users manage their own daily intention card" on daily_intention_cards;
-create policy "Users manage their own daily intention card"
-  on daily_intention_cards for all
+-- Oráculo del día: qué carta del mazo curado (src/lib/oracle-deck.js) salió.
+-- Una por persona por día.
+create table if not exists daily_oracle_cards (
+  id         uuid primary key default gen_random_uuid(),
+  created_at timestamptz default now(),
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  date_key   text not null,
+  card_id    text not null,
+  unique (user_id, date_key)
+);
+
+alter table daily_oracle_cards enable row level security;
+
+drop policy if exists "Users manage their own daily oracle card" on daily_oracle_cards;
+create policy "Users manage their own daily oracle card"
+  on daily_oracle_cards for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
@@ -93,5 +107,5 @@ create index if not exists ritual_favorites_user_id_idx on ritual_favorites(user
 create index if not exists ritual_favorites_ritual_id_idx on ritual_favorites(ritual_id);
 create index if not exists ritual_likes_user_id_idx on ritual_likes(user_id);
 create index if not exists ritual_likes_ritual_id_idx on ritual_likes(ritual_id);
-create index if not exists daily_intention_cards_user_id_idx on daily_intention_cards(user_id);
-create index if not exists daily_intention_cards_date_key_idx on daily_intention_cards(date_key);
+create index if not exists daily_intentions_user_id_idx on daily_intentions(user_id);
+create index if not exists daily_oracle_cards_user_id_idx on daily_oracle_cards(user_id);

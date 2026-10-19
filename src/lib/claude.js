@@ -52,31 +52,3 @@ Máximo dos frases cortas. Sin comillas.`,
   return message.content[0].text.trim();
 }
 
-// Personaliza el gesto concreto de una carta del Oráculo del día a partir de
-// lo que la persona desea hoy. Corre en paralelo con reframeIntention, así que no
-// ve la intención final: se apoya en la carta y en el relato.
-export async function generateOracleGesture({ card, moonPhase, inputText }) {
-  const message = await client.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 90,
-    system: `Escribís el gesto concreto de una carta de oráculo diaria, en español rioplatense con voseo.
-El gesto es una sola acción simple, física o cotidiana, que se pueda hacer hoy en menos de quince minutos.
-Tiene que acercar a la persona a lo que desea hoy, leído a través del sentido de la carta.
-No tomes literalmente la imagen de la carta (si la carta es La Semilla, no se trata de plantar algo): traducí su sentido a la vida cotidiana.
-No repitas lo que contó la persona ni lo nombres literalmente.
-Una o dos frases cortas, en imperativo, sin género gramatical. Sin comillas, sin explicaciones, sin listas.
-Evitá lenguaje new age o genérico: manifestar, vibrar, universo, energía cósmica, sanar, abundancia, merecer.`,
-    messages: [
-      {
-        role: "user",
-        content: `Carta: ${card.name}
-Sentido de la carta: ${card.intention}
-Gesto de referencia: ${card.gesture}
-Fase lunar: ${moonPhase || "sin dato"}
-Lo que desea hoy la persona: ${inputText}`,
-      },
-    ],
-  });
-
-  return message.content[0].text.trim().replace(/^["«]|["»]$/g, "");
-}

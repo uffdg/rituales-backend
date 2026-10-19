@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireUser } from "../lib/auth.js";
-import { generateOracleGesture, reframeIntention } from "../lib/claude.js";
-import { mapDailyIntentionCardRow } from "../lib/daily-intention-cards.js";
+import { reframeIntention } from "../lib/claude.js";
+import { mapDailyIntentionRow, mapDailyOracleRow } from "../lib/daily.js";
 import { drawOracleCard } from "../lib/oracle-deck.js";
 import { mapRitualRow } from "../lib/rituals.js";
 import { supabase } from "../lib/supabase.js";
@@ -35,34 +35,6 @@ function isValidDateKey(dateKey) {
   return /^\d{4}-\d{2}-\d{2}$/.test(`${dateKey || ""}`);
 }
 
-async function getDailyIntentionCard(userId, dateKey) {
-  const { data, error } = await supabase
-    .from("daily_intention_cards")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("date_key", dateKey)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data || null;
-}
-
-meRouter.get("/daily-card", requireUser, async (req, res, next) => {
-  try {
-    const dateKey = `${req.query.date || ""}`.trim();
-
-    if (!isValidDateKey(dateKey)) {
-      return res.status(400).json({ error: "Fecha inválida." });
-    }
-
-    const card = await getDailyIntentionCard(req.user.id, dateKey);
-    res.json({ card: mapDailyIntentionCardRow(card) });
-  } catch (error) {
-    next(error);
-  }
-});
-
-const GESTURE_TIMEOUT_MS = 6000;
 const REFRAME_TIMEOUT_MS = 12000;
 const MAX_INPUT_LENGTH = 1000;
 const RECENT_CARDS_TO_AVOID = 7;
@@ -74,12 +46,94 @@ function withTimeout(promise, ms, label) {
   ]);
 }
 
+async function getDailyRow(table, userId, dateKey) {
+  const { data, error } = await supabase
+    .from(table)
+    .select("*")
+    .eq("user_id", userId)
+    .eq("date_key", dateKey)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
+// Inserta la fila del día. Si otra pestaña la creó mientras tanto (unique
+// user_id + date_key), devuelve esa en vez de fallar.
+async function insertDailyRow(table, row) {
+  const { data, error } = await supabase.from(table).insert(row).select("*").single();
+  if (!error) return { row: data, created: true };
+  if (error.code !== "23505") throw error;
+  return { row: await getDailyRow(table, row.user_id, row.date_key), created: false };
+}
+
+// ── Intención del día: la persona cuenta qué desea y recibe una intención ──
+
+meRouter.get("/daily-intention", requireUser, async (req, res, next) => {
+  try {
+    const dateKey = `${req.query.date || ""}`.trim();
+    if (!isValidDateKey(dateKey)) {
+      return res.status(400).json({ error: "Fecha inválida." });
+    }
+
+    const row = await getDailyRow("daily_intentions", req.user.id, dateKey);
+    res.json({ intention: mapDailyIntentionRow(row) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Idempotente: si ya hay una intención para esa fecha, la devuelve con
+// `created: false` en vez de escribir otra.
+meRouter.post("/daily-intention", requireUser, async (req, res, next) => {
+  try {
+    const dateKey = `${req.body?.dateKey || ""}`.trim();
+    const inputText = `${req.body?.inputText || ""}`.trim().slice(0, MAX_INPUT_LENGTH);
+
+    if (!isValidDateKey(dateKey)) {
+      return res.status(400).json({ error: "Fecha inválida." });
+    }
+
+    const existing = await getDailyRow("daily_intentions", req.user.id, dateKey);
+    if (existing) {
+      return res.json({ intention: mapDailyIntentionRow(existing), created: false });
+    }
+
+    if (!inputText) {
+      return res.status(400).json({ error: "Contanos qué deseás hoy para escribir tu intención." });
+    }
+
+    // Sin API key se usa el texto tal cual.
+    let intentionText = inputText;
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        intentionText =
+          (await withTimeout(reframeIntention(inputText), REFRAME_TIMEOUT_MS, "Reframe")) || inputText;
+      } catch (error) {
+        console.error("Daily intention reframe failed:", error.message);
+        return res.status(502).json({ error: "No pudimos escribir tu intención. Probá de nuevo." });
+      }
+    }
+
+    const { row, created } = await insertDailyRow("daily_intentions", {
+      user_id: req.user.id,
+      date_key: dateKey,
+      input_text: inputText,
+      intention_text: intentionText,
+    });
+    res.status(created ? 201 : 200).json({ intention: mapDailyIntentionRow(row), created });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Oráculo del día: la persona saca una carta del mazo curado ──
+
 async function getRecentCardIds(userId) {
   const { data, error } = await supabase
-    .from("daily_intention_cards")
+    .from("daily_oracle_cards")
     .select("card_id")
     .eq("user_id", userId)
-    .not("card_id", "is", null)
     .order("date_key", { ascending: false })
     .limit(RECENT_CARDS_TO_AVOID);
 
@@ -87,52 +141,33 @@ async function getRecentCardIds(userId) {
   return (data || []).map((row) => row.card_id);
 }
 
-// El gesto personalizado es un extra: si no hay API key, tarda demasiado o
-// falla, la carta sale con el gesto curado.
-async function personalizeGesture(card, moonPhase, inputText) {
-  if (!process.env.ANTHROPIC_API_KEY) return card.gesture;
-
+meRouter.get("/daily-oracle", requireUser, async (req, res, next) => {
   try {
-    const gesture = await withTimeout(
-      generateOracleGesture({ card, moonPhase, inputText }),
-      GESTURE_TIMEOUT_MS,
-      "Gesture generation",
-    );
-    return gesture || card.gesture;
+    const dateKey = `${req.query.date || ""}`.trim();
+    if (!isValidDateKey(dateKey)) {
+      return res.status(400).json({ error: "Fecha inválida." });
+    }
+
+    const row = await getDailyRow("daily_oracle_cards", req.user.id, dateKey);
+    res.json({ card: mapDailyOracleRow(row) });
   } catch (error) {
-    console.error("Oracle gesture fallback:", error.message);
-    return card.gesture;
+    next(error);
   }
-}
+});
 
-// La intención sale de lo que contó la persona, con el prompt de
-// reframeIntention. Sin API key se usa el texto tal cual.
-async function buildIntention(inputText) {
-  if (!process.env.ANTHROPIC_API_KEY) return inputText;
-  const intention = await withTimeout(reframeIntention(inputText), REFRAME_TIMEOUT_MS, "Reframe");
-  return intention || inputText;
-}
-
-// Saca la carta del día a partir de lo que contó la persona. Idempotente: si
-// ya hay una carta para esa fecha, la devuelve con `created: false` en vez de
-// sacar otra.
-meRouter.post("/daily-card", requireUser, async (req, res, next) => {
+// Idempotente: si ya sacó carta ese día, devuelve la misma con `created: false`.
+meRouter.post("/daily-oracle", requireUser, async (req, res, next) => {
   try {
     const dateKey = `${req.body?.dateKey || ""}`.trim();
     const moonPhase = `${req.body?.moonPhase || ""}`.trim();
-    const inputText = `${req.body?.inputText || ""}`.trim().slice(0, MAX_INPUT_LENGTH);
 
     if (!isValidDateKey(dateKey)) {
       return res.status(400).json({ error: "Fecha inválida." });
     }
 
-    const existing = await getDailyIntentionCard(req.user.id, dateKey);
+    const existing = await getDailyRow("daily_oracle_cards", req.user.id, dateKey);
     if (existing) {
-      return res.json({ card: mapDailyIntentionCardRow(existing), created: false });
-    }
-
-    if (!inputText) {
-      return res.status(400).json({ error: "Contanos cómo llegás hoy para armar tu carta." });
+      return res.json({ card: mapDailyOracleRow(existing), created: false });
     }
 
     const card = drawOracleCard({
@@ -140,45 +175,12 @@ meRouter.post("/daily-card", requireUser, async (req, res, next) => {
       excludeIds: await getRecentCardIds(req.user.id),
     });
 
-    let intention;
-    let gesture;
-    try {
-      [intention, gesture] = await Promise.all([
-        buildIntention(inputText),
-        personalizeGesture(card, moonPhase, inputText),
-      ]);
-    } catch (error) {
-      console.error("Oracle reframe failed:", error.message);
-      return res.status(502).json({ error: "No pudimos armar tu intención. Probá de nuevo." });
-    }
-
-    const { data, error } = await supabase
-      .from("daily_intention_cards")
-      .insert({
-        user_id: req.user.id,
-        date_key: dateKey,
-        card_id: card.id,
-        input_text: inputText,
-        intention_text: intention,
-        gesture,
-      })
-      .select("*")
-      .single();
-
-    if (!error) {
-      return res.status(201).json({
-        card: mapDailyIntentionCardRow(data),
-        created: true,
-      });
-    }
-
-    // Otra pestaña sacó la carta mientras generábamos el texto.
-    if (error.code !== "23505") {
-      throw error;
-    }
-
-    const winner = await getDailyIntentionCard(req.user.id, dateKey);
-    res.json({ card: mapDailyIntentionCardRow(winner), created: false });
+    const { row, created } = await insertDailyRow("daily_oracle_cards", {
+      user_id: req.user.id,
+      date_key: dateKey,
+      card_id: card.id,
+    });
+    res.status(created ? 201 : 200).json({ card: mapDailyOracleRow(row), created });
   } catch (error) {
     next(error);
   }
