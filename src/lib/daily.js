@@ -11,8 +11,8 @@ export function mapDailyIntentionRow(row) {
   };
 }
 
-// El contenido de la carta vive en el mazo (oracle-deck.js); la fila solo
-// guarda qué carta salió.
+// El contenido del arcano vive en el mazo (oracle-deck.js); la fila solo
+// guarda cuál salió.
 export function mapDailyOracleRow(row) {
   if (!row) return null;
 
@@ -22,10 +22,11 @@ export function mapDailyOracleRow(row) {
   return {
     dateKey: row.date_key,
     cardId: card.id,
+    number: card.number,
     name: card.name,
-    symbol: card.symbol,
-    message: card.message,
-    gesture: card.gesture,
-    createdAt: row.created_at,
+    keywords: card.keywords,
+    mirada: card.mirada,
+    consejo: card.consejo,
+    createdAt: row.created_at ?? null,
   };
 }

@@ -67,6 +67,18 @@ async function insertDailyRow(table, row) {
   return { row: await getDailyRow(table, row.user_id, row.date_key), created: false };
 }
 
+// Leer o guardar la fila del día es secundario: si la base falla (por ejemplo,
+// falta la tabla), se registra y la persona igual recibe su resultado, sin
+// guardar.
+async function tryDb(label, fn, fallback) {
+  try {
+    return await fn();
+  } catch (error) {
+    console.error(`${label} failed:`, error.message);
+    return fallback;
+  }
+}
+
 // ── Intención del día: la persona cuenta qué desea y recibe una intención ──
 
 meRouter.get("/daily-intention", requireUser, async (req, res, next) => {
@@ -94,7 +106,11 @@ meRouter.post("/daily-intention", requireUser, async (req, res, next) => {
       return res.status(400).json({ error: "Fecha inválida." });
     }
 
-    const existing = await getDailyRow("daily_intentions", req.user.id, dateKey);
+    const existing = await tryDb(
+      "Daily intention read",
+      () => getDailyRow("daily_intentions", req.user.id, dateKey),
+      null,
+    );
     if (existing) {
       return res.json({ intention: mapDailyIntentionRow(existing), created: false });
     }
@@ -115,13 +131,21 @@ meRouter.post("/daily-intention", requireUser, async (req, res, next) => {
       }
     }
 
-    const { row, created } = await insertDailyRow("daily_intentions", {
+    const newRow = {
       user_id: req.user.id,
       date_key: dateKey,
       input_text: inputText,
       intention_text: intentionText,
+    };
+    const saved = await tryDb("Daily intention save", () => insertDailyRow("daily_intentions", newRow), null);
+    if (!saved) {
+      return res.status(201).json({ intention: mapDailyIntentionRow(newRow), created: true, persisted: false });
+    }
+    res.status(saved.created ? 201 : 200).json({
+      intention: mapDailyIntentionRow(saved.row),
+      created: saved.created,
+      persisted: true,
     });
-    res.status(created ? 201 : 200).json({ intention: mapDailyIntentionRow(row), created });
   } catch (error) {
     next(error);
   }
@@ -159,28 +183,34 @@ meRouter.get("/daily-oracle", requireUser, async (req, res, next) => {
 meRouter.post("/daily-oracle", requireUser, async (req, res, next) => {
   try {
     const dateKey = `${req.body?.dateKey || ""}`.trim();
-    const moonPhase = `${req.body?.moonPhase || ""}`.trim();
 
     if (!isValidDateKey(dateKey)) {
       return res.status(400).json({ error: "Fecha inválida." });
     }
 
-    const existing = await getDailyRow("daily_oracle_cards", req.user.id, dateKey);
-    if (existing) {
+    const existing = await tryDb(
+      "Daily oracle read",
+      () => getDailyRow("daily_oracle_cards", req.user.id, dateKey),
+      null,
+    );
+    if (existing && mapDailyOracleRow(existing)) {
       return res.json({ card: mapDailyOracleRow(existing), created: false });
     }
 
     const card = drawOracleCard({
-      moonPhase,
-      excludeIds: await getRecentCardIds(req.user.id),
+      excludeIds: await tryDb("Recent oracle cards read", () => getRecentCardIds(req.user.id), []),
     });
 
-    const { row, created } = await insertDailyRow("daily_oracle_cards", {
-      user_id: req.user.id,
-      date_key: dateKey,
-      card_id: card.id,
+    const newRow = { user_id: req.user.id, date_key: dateKey, card_id: card.id };
+    const saved = await tryDb("Daily oracle save", () => insertDailyRow("daily_oracle_cards", newRow), null);
+    if (!saved) {
+      return res.status(201).json({ card: mapDailyOracleRow(newRow), created: true, persisted: false });
+    }
+    res.status(saved.created ? 201 : 200).json({
+      card: mapDailyOracleRow(saved.row),
+      created: saved.created,
+      persisted: true,
     });
-    res.status(created ? 201 : 200).json({ card: mapDailyOracleRow(row), created });
   } catch (error) {
     next(error);
   }

@@ -29,7 +29,7 @@ Express API for the Rituales app, ESM throughout (`"type": "module"`). Deployed 
 - `GET  /api/me/dashboard` — authenticated user's own rituals + favorites + likes received
 - `PATCH /api/me/profile` — update user's full name
 - `GET /POST /api/me/daily-intention` — "Intención del día": `POST` takes what the user wishes for today (`inputText`) and stores the `reframeIntention` output; one per user per day; requires auth
-- `GET /POST /api/me/daily-oracle` — "Oráculo del día": `POST` draws a card from the curated deck (no input, no AI); one per user per day; requires auth
+- `GET /POST /api/me/daily-oracle` — "Oráculo del día": `POST` draws one of the 22 major arcana (no input, no AI); one per user per day; requires auth
 
 All routes funnel through a single error-handling middleware in `src/index.js` that logs and returns `{ error }` as JSON — route handlers just call `next(err)`.
 
@@ -49,7 +49,7 @@ Routes that need auth use `requireUser` middleware. Routes like `rituals/create`
 - `src/lib/speech.js`:
   - `applyPauseMarkers(script)` → converts `[P1]`/`[P2]`/`[P3]`/`[RESPIRA]` and `[PAUSA_*]` markers to ElevenLabs SSML `<break time="..." />` tags for meditation pacing
 
-`src/lib/oracle-deck.js` — the curated Oráculo del día deck (team-written name, message, gesture, symbol). `drawOracleCard` weights cards matching the client-sent moon phase 3x and skips the user's last 7 cards. Card content lives only here; the DB stores just `card_id`, and `mapDailyOracleRow` in `src/lib/daily.js` joins it back.
+`src/lib/oracle-deck.js` — the Oráculo del día deck: the 22 Rider-Waite major arcana (upright), each with number, name, keywords, `mirada` and `consejo` (team-written, no AI). `drawOracleCard` picks at random, skipping the user's last 7 cards. Card content lives only here; the DB stores just `card_id`, and `mapDailyOracleRow` in `src/lib/daily.js` joins it back. The illustrations live in the frontend (`rituales-app/src/app/components/arcana/ArcanaArt.tsx`), keyed by the same ids.
 
 `src/lib/session.js` — `buildGuidedSession(input, ritual)` builds the structured session plan with timed segments (intro, personalized, ambient, closing). The personalized script is the only segment sent to TTS.
 
@@ -69,7 +69,7 @@ Schema in `supabase/schema.sql`. Key tables:
 - `rituals` — main table, `user_id` nullable (anonymous rituals allowed)
 - `ritual_favorites` / `ritual_likes` — junction tables with unique constraint per user+ritual
 - `events` — analytics, `props` is JSONB
-- `daily_intentions` / `daily_oracle_cards` — one row per `(user_id, date_key)` each (unique). `date_key` is a `YYYY-MM-DD` string supplied by the client (the user's local day), not derived server-side. Both `POST` routes are idempotent: if a row exists for that date they return it with `created: false`. Rows are shaped by `mapDailyIntentionRow` / `mapDailyOracleRow` in `src/lib/daily.js`.
+- `daily_intentions` / `daily_oracle_cards` — one row per `(user_id, date_key)` each (unique). `date_key` is a `YYYY-MM-DD` string supplied by the client (the user's local day), not derived server-side. Both `POST` routes are idempotent: if a row exists for that date they return it with `created: false`. If the DB read/write fails they still return the result with `persisted: false` and log the error (`tryDb` in `src/routes/me.js`), so a missing table degrades to "not saved" instead of a broken feature. Rows are shaped by `mapDailyIntentionRow` / `mapDailyOracleRow` in `src/lib/daily.js`.
 
 **RLS**: Enabled only on `daily_intentions` and `daily_oracle_cards`; still pending on the other tables (see Supabase security alert). The backend uses the service role key, so RLS policies don't constrain these routes — ownership is enforced in the handlers by filtering on `req.user.id`.
 
