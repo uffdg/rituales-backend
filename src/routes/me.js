@@ -81,6 +81,19 @@ async function tryDb(label, fn, fallback) {
 
 // ── Intención del día: la persona cuenta qué desea y recibe una intención ──
 
+async function getDailyIntentions(userId, dateKey) {
+  const { data, error } = await supabase
+    .from("daily_intentions")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("date_key", dateKey)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+// Devuelve la última intención del día (la que se muestra) y cuántas pidió.
 meRouter.get("/daily-intention", requireUser, async (req, res, next) => {
   try {
     const dateKey = `${req.query.date || ""}`.trim();
@@ -88,15 +101,15 @@ meRouter.get("/daily-intention", requireUser, async (req, res, next) => {
       return res.status(400).json({ error: "Fecha inválida." });
     }
 
-    const row = await getDailyRow("daily_intentions", req.user.id, dateKey);
-    res.json({ intention: mapDailyIntentionRow(row) });
+    const rows = await getDailyIntentions(req.user.id, dateKey);
+    res.json({ intention: mapDailyIntentionRow(rows[0] ?? null), count: rows.length });
   } catch (error) {
     next(error);
   }
 });
 
-// Idempotente: si ya hay una intención para esa fecha, la devuelve con
-// `created: false` en vez de escribir otra.
+// A diferencia de la carta, la intención se puede volver a pedir: cada pedido
+// guarda una nueva y todas quedan en el registro del día.
 meRouter.post("/daily-intention", requireUser, async (req, res, next) => {
   try {
     const dateKey = `${req.body?.dateKey || ""}`.trim();
@@ -104,15 +117,6 @@ meRouter.post("/daily-intention", requireUser, async (req, res, next) => {
 
     if (!isValidDateKey(dateKey)) {
       return res.status(400).json({ error: "Fecha inválida." });
-    }
-
-    const existing = await tryDb(
-      "Daily intention read",
-      () => getDailyRow("daily_intentions", req.user.id, dateKey),
-      null,
-    );
-    if (existing) {
-      return res.json({ intention: mapDailyIntentionRow(existing), created: false });
     }
 
     if (!inputText) {
@@ -137,15 +141,16 @@ meRouter.post("/daily-intention", requireUser, async (req, res, next) => {
       input_text: inputText,
       intention_text: intentionText,
     };
-    const saved = await tryDb("Daily intention save", () => insertDailyRow("daily_intentions", newRow), null);
-    if (!saved) {
-      return res.status(201).json({ intention: mapDailyIntentionRow(newRow), created: true, persisted: false });
-    }
-    res.status(saved.created ? 201 : 200).json({
-      intention: mapDailyIntentionRow(saved.row),
-      created: saved.created,
-      persisted: true,
-    });
+    const saved = await tryDb(
+      "Daily intention save",
+      async () => {
+        const { data, error } = await supabase.from("daily_intentions").insert(newRow).select("*").single();
+        if (error) throw error;
+        return data;
+      },
+      null,
+    );
+    res.status(201).json({ intention: mapDailyIntentionRow(saved ?? newRow), persisted: Boolean(saved) });
   } catch (error) {
     next(error);
   }
@@ -208,6 +213,52 @@ meRouter.post("/daily-oracle", requireUser, async (req, res, next) => {
       created: saved.created,
       persisted: true,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Registro diario: intenciones y carta de cada día, para el calendario ──
+
+const MAX_RECORD_RANGE_DAYS = 62;
+
+meRouter.get("/daily-records", requireUser, async (req, res, next) => {
+  try {
+    const from = `${req.query.from || ""}`.trim();
+    const to = `${req.query.to || ""}`.trim();
+    const rangeDays = (Date.parse(to) - Date.parse(from)) / 86_400_000;
+
+    if (!isValidDateKey(from) || !isValidDateKey(to) || !(rangeDays >= 0 && rangeDays <= MAX_RECORD_RANGE_DAYS)) {
+      return res.status(400).json({ error: "Rango de fechas inválido." });
+    }
+
+    const inRange = (table) =>
+      supabase
+        .from(table)
+        .select("*")
+        .eq("user_id", req.user.id)
+        .gte("date_key", from)
+        .lte("date_key", to)
+        .order("created_at", { ascending: true })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return data || [];
+        });
+
+    const [intentionRows, cardRows] = await Promise.all([
+      tryDb("Daily intentions range read", () => inRange("daily_intentions"), []),
+      tryDb("Daily oracle range read", () => inRange("daily_oracle_cards"), []),
+    ]);
+
+    const days = new Map();
+    const dayFor = (dateKey) => {
+      if (!days.has(dateKey)) days.set(dateKey, { dateKey, intentions: [], card: null });
+      return days.get(dateKey);
+    };
+    for (const row of intentionRows) dayFor(row.date_key).intentions.push(mapDailyIntentionRow(row));
+    for (const row of cardRows) dayFor(row.date_key).card = mapDailyOracleRow(row);
+
+    res.json({ days: [...days.values()].sort((a, b) => a.dateKey.localeCompare(b.dateKey)) });
   } catch (error) {
     next(error);
   }

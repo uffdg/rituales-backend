@@ -7,7 +7,7 @@ export function mapDailyIntentionRow(row) {
     dateKey: row.date_key,
     inputText: row.input_text,
     intentionText: row.intention_text,
-    createdAt: row.created_at,
+    createdAt: row.created_at ?? null,
   };
 }
 

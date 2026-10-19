@@ -37,7 +37,7 @@ Intensidad: ${input.intensity || "suave"}`,
 export async function reframeIntention(rawText) {
   const message = await client.messages.create({
     model: "claude-haiku-4-5",
-    max_tokens: 80,
+    max_tokens: 220,
     system: `Transformás lo que dice una persona en una intención breve, concreta y encarnada, en español rioplatense.
 Primero reflejá algo específico de lo que la persona trajo; después abrí una mirada más clara para este momento.
 Usá segunda persona con vos. Frases cortas. Tono directo, contemplativo y sin género gramatical.
@@ -49,6 +49,13 @@ Máximo dos frases cortas. Sin comillas.`,
     messages: [{ role: "user", content: rawText }],
   });
 
-  return message.content[0].text.trim();
+  const text = message.content[0].text.trim();
+  // Si igual se pasó del límite, no mostrar una frase cortada a la mitad.
+  return message.stop_reason === "max_tokens" ? trimToLastSentence(text) : text;
+}
+
+function trimToLastSentence(text) {
+  const end = Math.max(text.lastIndexOf("."), text.lastIndexOf("!"), text.lastIndexOf("?"));
+  return end > 0 ? text.slice(0, end + 1) : text;
 }
 

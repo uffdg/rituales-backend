@@ -60,15 +60,15 @@ create table if not exists events (
 );
 
 -- Intención del día: lo que la persona desea (input_text) y la intención
--- que escribe reframeIntention. Una por persona por día.
+-- que escribe reframeIntention. Se puede pedir varias veces por día; todas
+-- quedan en el registro.
 create table if not exists daily_intentions (
   id             uuid primary key default gen_random_uuid(),
   created_at     timestamptz default now(),
   user_id        uuid not null references auth.users(id) on delete cascade,
   date_key       text not null,
   input_text     text not null,
-  intention_text text not null,
-  unique (user_id, date_key)
+  intention_text text not null
 );
 
 alter table daily_intentions enable row level security;
@@ -107,5 +107,5 @@ create index if not exists ritual_favorites_user_id_idx on ritual_favorites(user
 create index if not exists ritual_favorites_ritual_id_idx on ritual_favorites(ritual_id);
 create index if not exists ritual_likes_user_id_idx on ritual_likes(user_id);
 create index if not exists ritual_likes_ritual_id_idx on ritual_likes(ritual_id);
-create index if not exists daily_intentions_user_id_idx on daily_intentions(user_id);
+create index if not exists daily_intentions_user_date_idx on daily_intentions(user_id, date_key);
 create index if not exists daily_oracle_cards_user_id_idx on daily_oracle_cards(user_id);

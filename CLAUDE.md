@@ -28,8 +28,9 @@ Express API for the Rituales app, ESM throughout (`"type": "module"`). Deployed 
 - `POST /api/events` — analytics event ingestion
 - `GET  /api/me/dashboard` — authenticated user's own rituals + favorites + likes received
 - `PATCH /api/me/profile` — update user's full name
-- `GET /POST /api/me/daily-intention` — "Intención del día": `POST` takes what the user wishes for today (`inputText`) and stores the `reframeIntention` output; one per user per day; requires auth
+- `GET /POST /api/me/daily-intention` — "Intención del día": `POST` takes what the user wishes for today (`inputText`) and stores the `reframeIntention` output; can be requested many times per day (`GET` returns the latest); requires auth
 - `GET /POST /api/me/daily-oracle` — "Oráculo del día": `POST` draws one of the 22 major arcana (no input, no AI); one per user per day; requires auth
+- `GET  /api/me/daily-records?from=&to=` — intentions + arcana per day in a date range (max 62 days), for the profile calendar; requires auth
 
 All routes funnel through a single error-handling middleware in `src/index.js` that logs and returns `{ error }` as JSON — route handlers just call `next(err)`.
 
@@ -69,7 +70,7 @@ Schema in `supabase/schema.sql`. Key tables:
 - `rituals` — main table, `user_id` nullable (anonymous rituals allowed)
 - `ritual_favorites` / `ritual_likes` — junction tables with unique constraint per user+ritual
 - `events` — analytics, `props` is JSONB
-- `daily_intentions` / `daily_oracle_cards` — one row per `(user_id, date_key)` each (unique). `date_key` is a `YYYY-MM-DD` string supplied by the client (the user's local day), not derived server-side. Both `POST` routes are idempotent: if a row exists for that date they return it with `created: false`. If the DB read/write fails they still return the result with `persisted: false` and log the error (`tryDb` in `src/routes/me.js`), so a missing table degrades to "not saved" instead of a broken feature. Rows are shaped by `mapDailyIntentionRow` / `mapDailyOracleRow` in `src/lib/daily.js`.
+- `daily_intentions` / `daily_oracle_cards` — `daily_intentions` allows many rows per day; `daily_oracle_cards` is unique per `(user_id, date_key)`. `date_key` is a `YYYY-MM-DD` string supplied by the client (the user's local day), not derived server-side. `POST /daily-oracle` is idempotent (returns the existing card with `created: false`); `POST /daily-intention` always inserts a new row. If the DB read/write fails they still return the result with `persisted: false` and log the error (`tryDb` in `src/routes/me.js`), so a missing table degrades to "not saved" instead of a broken feature. Rows are shaped by `mapDailyIntentionRow` / `mapDailyOracleRow` in `src/lib/daily.js`.
 
 **RLS**: Enabled only on `daily_intentions` and `daily_oracle_cards`; still pending on the other tables (see Supabase security alert). The backend uses the service role key, so RLS policies don't constrain these routes — ownership is enforced in the handlers by filtering on `req.user.id`.
 
